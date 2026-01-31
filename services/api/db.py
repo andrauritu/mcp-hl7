@@ -10,5 +10,7 @@ def get_conn() -> sqlite3.Connection:
 
 def init_db() -> None:
     schema_path = Path(__file__).with_name("schema.sql")
+    schema_sql = schema_path.read_text(encoding="utf-8")
+    
     with get_conn() as conn:
-        conn.executescript(schema_path.read_text(encoding="utf-8"))
+        conn.executescript(schema_sql)

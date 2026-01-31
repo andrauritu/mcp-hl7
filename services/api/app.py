@@ -1,3 +1,4 @@
+import re
 from flask import Flask, jsonify, request
 
 from db import init_db, get_conn
@@ -48,5 +49,78 @@ def get_patient(patient_id: int):
 
     if row is None:
         return jsonify(error="patient_not_found"), 404
+    
+    return jsonify(dict(row))
+
+
+@app.get("/icd/search")
+def icd_search():
+    q = str(request.args.get("q", "")).strip()
+    limit_raw = request.args.get("limit") or "5"
+
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        return jsonify(error="invalid_limit"), 400
+    
+
+    limit = max(1, min(20, limit))
+
+    if not q:
+        return jsonify(error = "empty_query", results = []), 400
+    
+
+    tokens = re.findall(r"[a-z0-9]+", q.lower())
+
+    if not tokens:
+        return jsonify(error = "invalid_query", results = []), 400
+    
+    like = f"%{q.lower()}%"
+
+    with get_conn() as conn:
+        params = []
+
+        code_clause = "LOWER(code) LIKE ?"
+        params.append(f"%{q.lower()}%")
+
+        desc_clauses = []
+        for t in tokens:
+            desc_clauses.append("LOWER(description) LIKE ?")
+            params.append(f"%{t}%")
+
+        desc_sql = " AND ".join(desc_clauses)
+
+        where_sql = f"({code_clause}) OR ({desc_sql})"
+
+
+        rows = conn.execute(
+            f"""
+            SELECT code, description, chapter, section, category, category_code
+            FROM icd_codes
+            WHERE {where_sql}
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+
+    return jsonify(query=q, limit = limit, results = [dict(r) for r in rows])
+
+
+@app.get("/icd/<code>")
+def icd_get(code: str):
+    code = code.strip()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT code, description, chapter, section, category, category_code
+            FROM icd_codes
+            WHERE code = ?
+            """,
+            (code,),
+        ).fetchone()
+
+    if row is None:
+        return jsonify(error="icd_code_not_found", code=code), 404
     
     return jsonify(dict(row))

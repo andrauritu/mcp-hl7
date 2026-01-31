@@ -54,6 +54,49 @@ def patient_get(patient_id: int) -> dict:
     return {"ok": True, "patient": data}
 
 
+@mcp.tool()
+def icd_search(q: str, limit: int = 5) -> dict:
+    if limit < 1:
+        limit = 1
+    if limit > 20:
+        limit = 20
+
+    r = httpx.get(
+        f"{API_BASE}/icd/search",
+        params={"q": q, "limit": limit},
+        timeout=5.0,
+    )
+
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+
+    return {"ok": True, **data}
+
+
+
+@mcp.tool()
+def icd_get(code: str) -> dict:
+    code = code.strip()
+    if not code:
+        return {"ok": False, "status_code": 400, "error": "empty_code"}
+
+    r = httpx.get(f"{API_BASE}/icd/{code}", timeout=5.0)
+
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    
+    return {"ok": True, "icd": data}
+
 def main():
     mcp.run(transport="stdio")
 
