@@ -16,3 +16,8 @@ CREATE TABLE IF NOT EXISTS icd_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_icd_description ON icd_codes(description);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS icd_fts
+USING fts5(code, description);
+
+CREATE INDEX IF NOT EXISTS idx_icd_code ON icd_codes(code);

@@ -6,7 +6,7 @@ from db import get_conn, init_db
 CSV_PATH = Path(__file__).with_name("data") / "icd.csv"
 
 def ingest() -> int:
-    init_db
+    init_db()
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"ICD CSV file not found at {CSV_PATH}")
     
@@ -35,6 +35,7 @@ def ingest() -> int:
     with get_conn() as conn:
 
         conn.execute("DELETE FROM icd_codes")
+        conn.execute("DELETE FROM icd_fts")
         conn.executemany(
             """
             INSERT OR REPLACE INTO icd_codes
@@ -42,6 +43,15 @@ def ingest() -> int:
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             rows,
+        )
+
+        fts_rows = [(r[0], r[1]) for r in rows]
+        conn.executemany(
+            """
+            INSERT INTO icd_fts (code, description)
+            VALUES (?, ?)
+            """,
+            fts_rows,
         )
         conn.commit()
 

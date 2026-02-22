@@ -69,42 +69,86 @@ def icd_search():
     if not q:
         return jsonify(error = "empty_query", results = []), 400
     
-
+    
     tokens = re.findall(r"[a-z0-9]+", q.lower())
 
     if not tokens:
         return jsonify(error = "invalid_query", results = []), 400
     
-    like = f"%{q.lower()}%"
+    looks_like_code = bool(re.fullmatch(r"[a-z][0-9]{2}(\.[0-9a-z]+)?", q.lower()))
 
     with get_conn() as conn:
-        params = []
+        if looks_like_code:
+            rows = conn.execute(
+                """
+                SELECT code, description, chapter, section, category, category_code
+                FROM icd_codes
+                WHERE code = ?
+                    OR code LIKE ?
+                ORDER BY
+                    CASE WHEN code = ? THEN 0 ELSE 1 END,
+                    code
+                LIMIT ?
+                """,
+                (q.uppder(), f"{q.upper()}%", q.upper(), limit),
+            ).fetchall()
 
-        code_clause = "LOWER(code) LIKE ?"
-        params.append(f"%{q.lower()}%")
+            if rows:
+                return jsonify(
+                    query=q,
+                    limit=limit,
+                    mode = "code_exact",
+                    tokens = tokens,
+                    results = [dict(r) for r in rows],
+                )
+            
+        fts_query = " ".join(tokens)
+        rows = conn.execute(
+            """
+            SELECT c.code, c.description, c.chapter, c.section, c.category, c.category_code
+            FROM icd_fts f
+            JOIN icd_codes c ON c.code = f.code
+            WHERE f.description MATCH ?
+            ORDER BY bm25(icd_fts)
+            LIMIT ?
+            """,
+            (fts_query, limit),
+        ).fetchall()
 
+        if rows:
+            return jsonify(
+                query=q,
+                limit=limit,
+                mode = "fts",
+                tokens = tokens,
+                results = [dict(r) for r in rows],
+            )
+        
         desc_clauses = []
+        params = []
         for t in tokens:
             desc_clauses.append("LOWER(description) LIKE ?")
             params.append(f"%{t}%")
 
         desc_sql = " AND ".join(desc_clauses)
 
-        where_sql = f"({code_clause}) OR ({desc_sql})"
-
-
         rows = conn.execute(
             f"""
             SELECT code, description, chapter, section, category, category_code
             FROM icd_codes
-            WHERE {where_sql}
+            WHERE {desc_sql}
             LIMIT ?
             """,
             (*params, limit),
         ).fetchall()
 
-    return jsonify(query=q, limit = limit, results = [dict(r) for r in rows])
-
+    return jsonify(
+        query=q,
+        limit=limit,
+        mode = "like",
+        tokens = tokens,
+        results = [dict(r) for r in rows],
+    )
 
 @app.get("/icd/<code>")
 def icd_get(code: str):
