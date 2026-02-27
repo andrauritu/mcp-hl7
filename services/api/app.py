@@ -168,3 +168,124 @@ def icd_get(code: str):
         return jsonify(error="icd_code_not_found", code=code), 404
     
     return jsonify(dict(row))
+
+
+@app.post("/patients/<int:patient_id>/diagnoses")
+def add_diagnosis(patient_id: int):
+    body = request.get_json(force=True) or {}
+    term = (body.get("term") or "").strip()
+    icd_code = (body.get("icd_code") or "").strip().upper()
+    limit = body.get("limit", 5)
+
+    try:
+        limit = int(limit)
+    except ValueError:
+        return jsonify(error="invalid_limit"), 400
+    limit = max(1, min(20, limit))
+
+    with get_conn() as conn:
+        p = conn.execute(
+            "SELECT id FROM patients WHERE id = ?",
+            (patient_id,)
+        ).fetchone()
+        if p is None:
+            return jsonify(error="patient_not_found", patient_id=patient_id), 404
+        
+    if icd_code:
+        with get_conn() as conn:
+            icd = conn.execute(
+                "SELECT code, description FROM icd_codes WHERE code = ?",
+                (icd_code,),
+
+            ).fetchone()
+            if icd is None:
+                return jsonify(error="icd_code_not_found", icd_code=icd_code), 404
+
+            cur = conn.execute(
+                "INSERT INTO diagnoses (patient_id, icd_code, term) VALUES (?, ?, ?)",
+                (patient_id, icd_code, term or None),
+            )
+
+            conn.commit()
+
+            diag_id = cur.lastrowid
+            row = conn.execute(
+                """
+                SELECT d.id, d.patient_id, d.icd_code, d.term, d.created_at, c.description
+                FROM diagnoses d
+                JOIN icd_codes c ON c.code = d.icd_code
+                WHERE d.id = ?
+                """,
+                (diag_id,),
+            ).fetchone()
+
+        return jsonify(ok = True, diagnosis = dict(row), chosen = {"code": icd["code"], "description": icd["description"]})
+
+    if not term:
+        return jsonify(error = "missing_term_or_icd_code"), 400
+
+    q_lower = term.lower()
+    tokens = re.findall(r"[a-z0-9]+", q_lower)
+    if not tokens:
+        return jsonify(error = "empty_query"), 400
+
+    with get_conn() as conn:
+        candidates = []
+        try:
+            fts_query = " ".join(tokens)
+            rows = conn.execute(
+                """
+                SELECT c.code, c.description
+                FROM icd_fts f
+                JOIN icd_codes c ON c.code = f.code
+                WHERE f.description MATCH ?
+                ORDER BY bm25(f)
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            ).fetchall()
+            candidates = [dict(r) for r in rows]
+
+        except Exception:
+            candidates = []
+
+        if not candidates:
+            desc_clauses = []
+            params = []
+            for t in tokens:
+                desc_clauses.append("LOWER(description) LIKE ?")
+                params.append(f"%{t}%")
+
+            desc_sql = " AND ".join(desc_clauses)
+
+            rows = conn.execute(
+                f"""
+                SELECT code, description
+                FROM icd_codes
+                WHERE {desc_sql}
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+            candidates = [dict(r) for r in rows]
+
+    if not candidates:
+        return jsonify(ok = False, status = "no_match", term = term, candidates = []), 200
+
+    return jsonify(ok = True, status = "needs_selection", term = term, candidates = candidates), 200
+
+
+@app.get("/patients/<int:patient_id>/diagnoses")
+def list_diagnoses(patient_id: int):
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT d.id, d.patient_id, d.icd_code, d.term, d.created_at, c.description
+            FROM diagnoses d
+            JOIN icd_codes c ON c.code = d.icd_code
+            WHERE d.patient_id = ?
+            ORDER BY d.created_at DESC
+            """,
+            (patient_id,),
+        ).fetchall()
+    return jsonify(patient_id=patient_id, diagnoses=[dict(r) for r in rows])
