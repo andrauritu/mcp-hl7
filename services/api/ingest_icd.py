@@ -25,11 +25,10 @@ def ingest() -> int:
             rows.append((
                 code,
                 desc,
-                row.get("chapter" or "").strip() or None,
-                row.get("section" or "").strip() or None,
-                row.get("category" or "").strip() or None,
-                row.get("category_code" or "").strip() or None,
-
+                (row.get("chapter") or "").strip() or None,
+                (row.get("section") or "").strip() or None,
+                (row.get("category") or "").strip() or None,
+                (row.get("category_code") or "").strip() or None,
             ))
 
     with get_conn() as conn:

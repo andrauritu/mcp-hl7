@@ -90,7 +90,7 @@ def icd_search():
                     code
                 LIMIT ?
                 """,
-                (q.uppder(), f"{q.upper()}%", q.upper(), limit),
+                (q.upper(), f"{q.upper()}%", q.upper(), limit),
             ).fetchall()
 
             if rows:
@@ -239,7 +239,7 @@ def add_diagnosis(patient_id: int):
                 FROM icd_fts f
                 JOIN icd_codes c ON c.code = f.code
                 WHERE f.description MATCH ?
-                ORDER BY bm25(f)
+                ORDER BY bm25(icd_fts)
                 LIMIT ?
                 """,
                 (fts_query, limit),
