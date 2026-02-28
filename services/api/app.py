@@ -2,6 +2,7 @@ import re
 from flask import Flask, jsonify, request
 
 from db import init_db, get_conn
+from hl7_builder import build_adt_a04
 
 app = Flask(__name__)
 init_db()
@@ -289,3 +290,59 @@ def list_diagnoses(patient_id: int):
             (patient_id,),
         ).fetchall()
     return jsonify(patient_id=patient_id, diagnoses=[dict(r) for r in rows])
+
+
+@app.post("/hl7/build/adt_a04")
+def  hl7_build_adt_a04():
+    body = request.get_json(force=True) or {}
+    patient_id = body.get("patient_id")
+
+    if not isinstance(patient_id, int):
+        return jsonify(error="invalid_patient_id"), 400
+    
+    with get_conn() as conn:
+        patient = conn.execute(
+            "SELECT id, name, dob, sex FROM patients WHERE id = ?",
+            (patient_id,),
+        ).fetchone()
+
+        if patient is None:
+            return jsonify(error="patient_not_found", patient_id=patient_id), 404
+        
+        dx_rows = conn.execute(
+            """
+            SELECT d.icd_code, c.description
+            FROM diagnoses d
+            JOIN icd_codes c ON c.code = d.icd_code
+            WHERE d.patient_id = ?
+            ORDER BY d.created_at ASC
+            """,
+            (patient_id,),
+        ).fetchall()
+
+    diagnoses = [dict(r) for r in dx_rows]
+
+    hl7_text = build_adt_a04(
+        patient_id=patient["id"],
+        patient_name=patient["name"],
+        dob=patient["dob"],
+        sex = patient["sex"],
+        diagnoses=diagnoses,
+    )
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
+            (patient_id, "ADT^A04", hl7_text, "built"),
+        )
+        conn.commit()
+        message_id = cur.lastrowid
+
+    return jsonify(
+        ok = True,
+        message_id = message_id,
+        patient_id = patient_id,
+        message_type = "ADT^A04",
+        diagnosis_count = len(diagnoses),
+        hl7_text = hl7_text,
+    ), 201
