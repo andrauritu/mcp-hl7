@@ -4,6 +4,8 @@ from flask import Flask, jsonify, request
 from db import init_db, get_conn
 from hl7_builder import build_adt_a04
 
+from mllp_client import send as mllp_send, is_ack
+
 app = Flask(__name__)
 init_db()
 
@@ -346,3 +348,54 @@ def  hl7_build_adt_a04():
         diagnosis_count = len(diagnoses),
         hl7_text = hl7_text,
     ), 201
+
+  
+@app.post("/hl7/send")
+def hl7_send():
+    """Send a built HL7 message to the mock receiver via MLLP. Returns ACK or NACK status and stores the result in the database."""
+    body = request.get_json(force = True) or {}
+    message_id = body.get("message_id")
+
+    if not isinstance(message_id, int):
+        return jsonify(error = "missing_message_id"), 400
+    
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, patient_id, hl7_text, status from hl7_messages WHERE id = ?",
+            (message_id,),
+        ).fetchone()
+
+    if row is None:
+        return jsonify(error = "message_not_found", message_id = message_id), 404
+
+    if row["status"] not in ("built", "failed"):
+        return jsonify(error = "message_not_found", message_id = message_id), 404
+
+    if row["status"] not in ("built", "nack"):
+        return jsonify(
+            error = "message_already_sent", 
+            message_id = message_id,
+            status = row["status"],
+        ), 409
+
+    try:
+        ack_text = mllp_send(row["hl7_text"])
+    except ConnectionError as e:
+        return jsonify(error = "receiver_unreachable", detail=str(e)), 503
+
+    status = "ack" if is_ack(ack_text) else "nack"
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
+            (status, ack_text, message_id),
+        )
+        conn.commit()
+
+    return jsonify(
+        ok = True,
+        message_id = message_id,
+        status = status,
+        ack_text = ack_text
+    )
+
