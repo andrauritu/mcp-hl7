@@ -2,6 +2,7 @@ import logging
 import sys
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.types import PromptMessage, TextContent
 
 logging.basicConfig(level=logging.INFO)
 mcp = FastMCP("hl7-mcp")
@@ -266,6 +267,15 @@ def blockchain_get_events(patient_id: int) -> dict:
         return {"ok": False, "status_code": r.status_code, "error": data}
 
     return {"ok": True, **data}
+
+@mcp.prompt()
+def admit_patient(patient_id: int) -> str:
+    return (
+        f"Admit patiennt {patient_id}: "
+        f"call both hl7_build_adt_a04(patient_id = {patient_id})"
+        f"and blockchain_record_admission(patient_id = {patient_id}) in parallel, "
+        f"then call hl7_send with the returned message_id."
+    )
 
 def main():
     mcp.run(transport="stdio")
