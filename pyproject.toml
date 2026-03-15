@@ -11,5 +11,7 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "services/api",
+    "services/blockchain_api",
     "adapters/mcp",
+    "adapters/mcp-blockchain",
 ]
