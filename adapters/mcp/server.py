@@ -7,7 +7,6 @@ logging.basicConfig(level=logging.INFO)
 mcp = FastMCP("hl7-mcp")
 
 API_BASE = "http://127.0.0.1:8000"
-BLOCKCHAIN_API_BASE = "http://127.0.0.1:8001"
 
 _TOOL_COUNTS: dict[str, int] = {}
 
@@ -147,23 +146,6 @@ def record_admission(patient_id: int) -> dict:
         f"{API_BASE}/admissions",
         json={"patient_id": patient_id},
         timeout=30.0,
-    )
-    try:
-        data = r.json()
-    except Exception:
-        data = {"error": "bad_response", "status_code": r.status_code}
-    if r.status_code >= 400:
-        return {"ok": False, "status_code": r.status_code, "error": data}
-    return {"ok": True, **data}
-
-
-@mcp.tool()
-def blockchain_get_events(patient_id: int) -> dict:
-    """Get all blockchain audit events (admissions and diagnoses) recorded for a patient."""
-    _count("blockchain_get_events")
-    r = httpx.get(
-        f"{BLOCKCHAIN_API_BASE}/blockchain/events/{patient_id}",
-        timeout=10.0,
     )
     try:
         data = r.json()
