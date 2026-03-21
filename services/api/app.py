@@ -1,10 +1,14 @@
+import os
 import re
+import requests
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, jsonify, request
 
 from db import init_db, get_conn
 from hl7_builder import build_adt_a04
-
 from mllp_client import send as mllp_send, is_ack
+
+BLOCKCHAIN_API_URL = os.environ.get("BLOCKCHAIN_API_URL", "http://127.0.0.1:8001")
 
 app = Flask(__name__)
 init_db()
@@ -222,7 +226,18 @@ def add_diagnosis(patient_id: int):
                 (diag_id,),
             ).fetchone()
 
-        return jsonify(ok = True, diagnosis = dict(row), chosen = {"code": icd["code"], "description": icd["description"]})
+        blockchain_result = None
+        try:
+            bc = requests.post(
+                f"{BLOCKCHAIN_API_URL}/blockchain/record_diagnosis",
+                json={"patient_id": patient_id, "icd_code": icd_code},
+                timeout=15.0,
+            )
+            blockchain_result = bc.json()
+        except Exception as e:
+            blockchain_result = {"ok": False, "error": str(e)}
+
+        return jsonify(ok=True, diagnosis=dict(row), chosen={"code": icd["code"], "description": icd["description"]}, blockchain=blockchain_result)
 
     if not term:
         return jsonify(error = "missing_term_or_icd_code"), 400
@@ -292,6 +307,99 @@ def list_diagnoses(patient_id: int):
             (patient_id,),
         ).fetchall()
     return jsonify(patient_id=patient_id, diagnoses=[dict(r) for r in rows])
+
+
+@app.post("/admissions")
+def create_admission():
+    """Build HL7 ADT^A04, send via MLLP, and record on blockchain — all in one atomic operation."""
+    body = request.get_json(force=True) or {}
+    patient_id = body.get("patient_id")
+
+    if not isinstance(patient_id, int):
+        return jsonify(error="invalid_patient_id"), 400
+
+    with get_conn() as conn:
+        patient = conn.execute(
+            "SELECT id, name, dob, sex FROM patients WHERE id = ?",
+            (patient_id,),
+        ).fetchone()
+
+        if patient is None:
+            return jsonify(error="patient_not_found", patient_id=patient_id), 404
+
+        dx_rows = conn.execute(
+            """
+            SELECT d.icd_code, c.description
+            FROM diagnoses d
+            JOIN icd_codes c ON c.code = d.icd_code
+            WHERE d.patient_id = ?
+            ORDER BY d.created_at ASC
+            """,
+            (patient_id,),
+        ).fetchall()
+
+    diagnoses = [dict(r) for r in dx_rows]
+
+    hl7_text = build_adt_a04(
+        patient_id=patient["id"],
+        patient_name=patient["name"],
+        dob=patient["dob"],
+        sex=patient["sex"],
+        diagnoses=diagnoses,
+    )
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
+            (patient_id, "ADT^A04", hl7_text, "built"),
+        )
+        conn.commit()
+        message_id = cur.lastrowid
+
+    def _send_hl7():
+        try:
+            ack_text = mllp_send(hl7_text)
+            status = "ack" if is_ack(ack_text) else "nack"
+            with get_conn() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
+                    (status, ack_text, message_id),
+                )
+                conn.commit()
+            return {"ok": True, "status": status, "ack_text": ack_text}
+        except ConnectionError as e:
+            with get_conn() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ? WHERE id = ?",
+                    ("failed", message_id),
+                )
+                conn.commit()
+            return {"ok": False, "error": "receiver_unreachable", "detail": str(e)}
+
+    def _record_blockchain():
+        try:
+            r = requests.post(
+                f"{BLOCKCHAIN_API_URL}/blockchain/record_admission",
+                json={"patient_id": patient_id, "message_type": "ADT^A04"},
+                timeout=15.0,
+            )
+            return r.json()
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        hl7_future = executor.submit(_send_hl7)
+        blockchain_future = executor.submit(_record_blockchain)
+        hl7_result = hl7_future.result()
+        blockchain_result = blockchain_future.result()
+
+    return jsonify(
+        ok=True,
+        message_id=message_id,
+        patient_id=patient_id,
+        hl7=hl7_result,
+        blockchain=blockchain_result,
+    ), 201
 
 
 @app.post("/hl7/build/adt_a04")

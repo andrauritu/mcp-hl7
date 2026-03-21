@@ -3,7 +3,7 @@ from pathlib import Path
 from web3 import Web3
 
 NODE_URL = "http://127.0.0.1:8545"
-CONTRACT_ADDRESS = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+CONTRACT_ADDRESS = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
 
 ABI_PATH = (
     Path(__file__).parent.parent.parent

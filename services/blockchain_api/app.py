@@ -76,14 +76,11 @@ def get_events(patient_id: int):
     except ConnectionError as e:
         return jsonify(error="node_unreachable", detail=str(e)), 503
 
-    admissions = contract.events.AdmissionRecorded.get_logs(
-        from_block=0,
-        argument_filters={"patientId": patient_id},
-    )
-    diagnoses = contract.events.DiagnosisRecorded.get_logs(
-        from_block=0,
-        argument_filters={"patientId": patient_id},
-    )
+    all_admissions = contract.events.AdmissionRecorded.get_logs(from_block=0, to_block="latest")
+    all_diagnoses = contract.events.DiagnosisRecorded.get_logs(from_block=0, to_block="latest")
+
+    admissions = [e for e in all_admissions if e["args"]["patientId"] == patient_id]
+    diagnoses = [e for e in all_diagnoses if e["args"]["patientId"] == patient_id]
 
     return jsonify(
         ok=True,
