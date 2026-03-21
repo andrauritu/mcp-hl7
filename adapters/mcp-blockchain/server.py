@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -58,26 +59,34 @@ def blockchain_verify_patient(patient_id: int) -> dict:
     chain_diagnoses = chain_data.get("diagnoses", [])
     chain_admissions = chain_data.get("admissions", [])
 
-    chain_icd_codes = {e["icdCode"] for e in chain_diagnoses}
-    db_icd_codes = {d["icd_code"] for d in db_diagnoses}
+    db_counts = Counter(d["icd_code"] for d in db_diagnoses)
+    chain_counts = Counter(e["icdCode"] for e in chain_diagnoses)
 
-    matched = db_icd_codes & chain_icd_codes
-    missing_from_blockchain = db_icd_codes - chain_icd_codes
-    blockchain_only = chain_icd_codes - db_icd_codes
-
+    all_codes = db_counts.keys() | chain_counts.keys()
     discrepancies = []
-    for code in missing_from_blockchain:
-        discrepancies.append({
-            "type": "missing_from_blockchain",
-            "icd_code": code,
-            "detail": "Diagnosis exists in DB but has no matching blockchain event",
-        })
-    for code in blockchain_only:
-        discrepancies.append({
-            "type": "blockchain_only",
-            "icd_code": code,
-            "detail": "Diagnosis exists on-chain but not in DB — possible data tampering",
-        })
+    matched = 0
+
+    for code in all_codes:
+        db_n = db_counts[code]
+        chain_n = chain_counts[code]
+        if db_n == chain_n:
+            matched += db_n
+        elif db_n > chain_n:
+            discrepancies.append({
+                "type": "missing_from_blockchain",
+                "icd_code": code,
+                "db_count": db_n,
+                "blockchain_count": chain_n,
+                "detail": f"{db_n - chain_n} occurrence(s) in DB have no matching blockchain event",
+            })
+        else:
+            discrepancies.append({
+                "type": "blockchain_only",
+                "icd_code": code,
+                "db_count": db_n,
+                "blockchain_count": chain_n,
+                "detail": f"{chain_n - db_n} occurrence(s) on-chain have no matching DB record — possible data tampering",
+            })
 
     verified = len(discrepancies) == 0
 
@@ -89,9 +98,9 @@ def blockchain_verify_patient(patient_id: int) -> dict:
             "db_diagnoses": len(db_diagnoses),
             "blockchain_diagnoses": len(chain_diagnoses),
             "blockchain_admissions": len(chain_admissions),
-            "matched": len(matched),
-            "missing_from_blockchain": len(missing_from_blockchain),
-            "blockchain_only": len(blockchain_only),
+            "matched": matched,
+            "missing_from_blockchain": sum(1 for d in discrepancies if d["type"] == "missing_from_blockchain"),
+            "blockchain_only": sum(1 for d in discrepancies if d["type"] == "blockchain_only"),
         },
         "discrepancies": discrepancies,
     }
