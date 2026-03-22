@@ -41,16 +41,6 @@ CREATE TABLE IF NOT EXISTS hl7_messages(
     message_type TEXT NOT NULL,
     hl7_text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'built',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (patient_id) REFERENCES patients(id)
-);
-
-CREATE TABLE IF NOT EXISTS hl7_messages(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id INTEGER NOT NULL,
-    message_type TEXT NOT NULL,
-    hl7_text TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'built',
     ack_text TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (patient_id) REFERENCES patients(id)

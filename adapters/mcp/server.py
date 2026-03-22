@@ -46,6 +46,21 @@ def patient_create(name: str, dob: str, sex: str) -> dict:
 
 
 @mcp.tool()
+def patient_list(limit: int = 50) -> dict:
+    """List all patients in the system, ordered by most recently created first."""
+    _count("patient_list")
+    limit = max(1, min(200, limit))
+    r = httpx.get(f"{API_BASE}/patients", params={"limit": limit}, timeout=5.0)
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    return {"ok": True, **data}
+
+
+@mcp.tool()
 def patient_get(patient_id: int) -> dict:
     """Get a patient record by their numeric ID."""
     _count("patient_get")

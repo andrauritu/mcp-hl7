@@ -4,7 +4,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, jsonify, request
 
-from db import init_db, get_conn
+from db import init_db, get_db
 from hl7_builder import build_adt_a04
 from mllp_client import send as mllp_send, is_ack
 
@@ -28,10 +28,10 @@ def create_patient():
     if not name or not dob or sex not in {"M", "F", "U"}:
         return jsonify(
             error = "invalid_input",
-            expected = {"name": "string", "dob": "YYYY-MM-DD", "sex": "M|F|O"},
+            expected = {"name": "string", "dob": "YYYY-MM-DD", "sex": "M|F|U"},
         ), 400
     
-    with get_conn() as conn:
+    with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO patients (name, dob, sex) VALUES (?, ?, ?)",
             (name, dob, sex),
@@ -46,9 +46,28 @@ def create_patient():
 
     return jsonify(dict(row)), 201
 
+@app.get('/patients')
+def list_patients():
+    limit_raw = request.args.get("limit", "50")
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        return jsonify(error="invalid_limit"), 400
+    limit = max(1, min(200, limit))
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, name, dob, sex, created_at FROM patients ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+    patients = [dict(r) for r in rows]
+    return jsonify(patients=patients, count=len(patients))
+
+
 @app.get('/patients/<int:patient_id>')
 def get_patient(patient_id: int):
-    with get_conn() as conn:
+    with get_db() as conn:
         row = conn.execute(
             "SELECT id, name, dob, sex, created_at FROM patients WHERE id = ?",
             (patient_id,),
@@ -84,7 +103,7 @@ def icd_search():
     
     looks_like_code = bool(re.fullmatch(r"[a-z][0-9]{2}(\.[0-9a-z]+)?", q.lower()))
 
-    with get_conn() as conn:
+    with get_db() as conn:
         if looks_like_code:
             rows = conn.execute(
                 """
@@ -161,7 +180,7 @@ def icd_search():
 def icd_get(code: str):
     code = code.strip()
 
-    with get_conn() as conn:
+    with get_db() as conn:
         row = conn.execute(
             """
             SELECT code, description, chapter, section, category, category_code
@@ -190,7 +209,7 @@ def add_diagnosis(patient_id: int):
         return jsonify(error="invalid_limit"), 400
     limit = max(1, min(20, limit))
 
-    with get_conn() as conn:
+    with get_db() as conn:
         p = conn.execute(
             "SELECT id FROM patients WHERE id = ?",
             (patient_id,)
@@ -199,7 +218,7 @@ def add_diagnosis(patient_id: int):
             return jsonify(error="patient_not_found", patient_id=patient_id), 404
         
     if icd_code:
-        with get_conn() as conn:
+        with get_db() as conn:
             icd = conn.execute(
                 "SELECT code, description FROM icd_codes WHERE code = ?",
                 (icd_code,),
@@ -247,7 +266,7 @@ def add_diagnosis(patient_id: int):
     if not tokens:
         return jsonify(error = "empty_query"), 400
 
-    with get_conn() as conn:
+    with get_db() as conn:
         candidates = []
         try:
             fts_query = " ".join(tokens)
@@ -295,7 +314,7 @@ def add_diagnosis(patient_id: int):
 
 @app.get("/patients/<int:patient_id>/diagnoses")
 def list_diagnoses(patient_id: int):
-    with get_conn() as conn:
+    with get_db() as conn:
         rows = conn.execute(
             """
             SELECT d.id, d.patient_id, d.icd_code, d.term, d.created_at, c.description
@@ -318,7 +337,7 @@ def create_admission():
     if not isinstance(patient_id, int):
         return jsonify(error="invalid_patient_id"), 400
 
-    with get_conn() as conn:
+    with get_db() as conn:
         patient = conn.execute(
             "SELECT id, name, dob, sex FROM patients WHERE id = ?",
             (patient_id,),
@@ -348,7 +367,7 @@ def create_admission():
         diagnoses=diagnoses,
     )
 
-    with get_conn() as conn:
+    with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
             (patient_id, "ADT^A04", hl7_text, "built"),
@@ -360,7 +379,7 @@ def create_admission():
         try:
             ack_text = mllp_send(hl7_text)
             status = "ack" if is_ack(ack_text) else "nack"
-            with get_conn() as conn:
+            with get_db() as conn:
                 conn.execute(
                     "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
                     (status, ack_text, message_id),
@@ -368,7 +387,7 @@ def create_admission():
                 conn.commit()
             return {"ok": True, "status": status, "ack_text": ack_text}
         except ConnectionError as e:
-            with get_conn() as conn:
+            with get_db() as conn:
                 conn.execute(
                     "UPDATE hl7_messages SET status = ? WHERE id = ?",
                     ("failed", message_id),
@@ -410,7 +429,7 @@ def  hl7_build_adt_a04():
     if not isinstance(patient_id, int):
         return jsonify(error="invalid_patient_id"), 400
     
-    with get_conn() as conn:
+    with get_db() as conn:
         patient = conn.execute(
             "SELECT id, name, dob, sex FROM patients WHERE id = ?",
             (patient_id,),
@@ -440,7 +459,7 @@ def  hl7_build_adt_a04():
         diagnoses=diagnoses,
     )
 
-    with get_conn() as conn:
+    with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
             (patient_id, "ADT^A04", hl7_text, "built"),
@@ -467,7 +486,7 @@ def hl7_send():
     if not isinstance(message_id, int):
         return jsonify(error = "missing_message_id"), 400
     
-    with get_conn() as conn:
+    with get_db() as conn:
         row = conn.execute(
             "SELECT id, patient_id, hl7_text, status from hl7_messages WHERE id = ?",
             (message_id,),
@@ -476,14 +495,11 @@ def hl7_send():
     if row is None:
         return jsonify(error = "message_not_found", message_id = message_id), 404
 
-    if row["status"] not in ("built", "failed"):
-        return jsonify(error = "message_not_found", message_id = message_id), 404
-
-    if row["status"] not in ("built", "nack"):
+    if row["status"] not in ("built", "failed", "nack"):
         return jsonify(
-            error = "message_already_sent", 
-            message_id = message_id,
-            status = row["status"],
+            error="message_already_sent",
+            message_id=message_id,
+            status=row["status"],
         ), 409
 
     try:
@@ -493,7 +509,7 @@ def hl7_send():
 
     status = "ack" if is_ack(ack_text) else "nack"
 
-    with get_conn() as conn:
+    with get_db() as conn:
         conn.execute(
             "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
             (status, ack_text, message_id),
