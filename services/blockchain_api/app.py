@@ -69,6 +69,57 @@ def record_diagnosis():
     ), 201
 
 
+@app.get("/blockchain/events")
+def get_all_events():
+    try:
+        limit = int(request.args.get("limit", 50))
+        offset = int(request.args.get("offset", 0))
+    except ValueError:
+        return jsonify(error="invalid_limit_or_offset"), 400
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+
+    try:
+        w3, contract = get_contract()
+    except ConnectionError as e:
+        return jsonify(error="node_unreachable", detail=str(e)), 503
+
+    all_admissions = contract.events.AdmissionRecorded.get_logs(from_block=0, to_block="latest")
+    all_diagnoses = contract.events.DiagnosisRecorded.get_logs(from_block=0, to_block="latest")
+
+    events = []
+    for e in all_admissions:
+        events.append({
+            "event_type": "admission",
+            "patient_id": e["args"]["patientId"],
+            "detail": e["args"]["messageType"],
+            "timestamp": e["args"]["timestamp"],
+            "block": e["blockNumber"],
+            "tx": e["transactionHash"].hex(),
+        })
+    for e in all_diagnoses:
+        events.append({
+            "event_type": "diagnosis",
+            "patient_id": e["args"]["patientId"],
+            "detail": e["args"]["icdCode"],
+            "timestamp": e["args"]["timestamp"],
+            "block": e["blockNumber"],
+            "tx": e["transactionHash"].hex(),
+        })
+
+    events.sort(key=lambda ev: ev["block"], reverse=True)
+    total = len(events)
+    page = events[offset:offset + limit]
+
+    return jsonify(
+        ok=True,
+        total=total,
+        limit=limit,
+        offset=offset,
+        events=page,
+    )
+
+
 @app.get("/blockchain/events/<int:patient_id>")
 def get_events(patient_id: int):
     try:

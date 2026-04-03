@@ -34,6 +34,26 @@ def blockchain_get_events(patient_id: int) -> dict:
 
 
 @mcp.tool()
+def blockchain_get_all_events(limit: int = 50, offset: int = 0) -> dict:
+    """Browse all blockchain audit events across all patients. Returns a paginated list of all admissions and diagnoses recorded on-chain, sorted by most recent first. Useful for auditing the entire chain."""
+    _count("blockchain_get_all_events")
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    r = httpx.get(
+        f"{BLOCKCHAIN_API_BASE}/blockchain/events",
+        params={"limit": limit, "offset": offset},
+        timeout=15.0,
+    )
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    return {"ok": True, **data}
+
+
+@mcp.tool()
 def blockchain_verify_patient(patient_id: int) -> dict:
     """Verify integrity of a patient's records by cross-checking the database against the blockchain audit trail. Returns matched records and any discrepancies — useful for detecting missing audit events or potential data tampering."""
     _count("blockchain_verify_patient")
