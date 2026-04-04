@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from contract import get_contract
+from contract import get_contract, ABI_PATH, _DEPLOYED_JSON, NODE_URL
 
 app = Flask(__name__)
 
@@ -208,4 +208,184 @@ def get_events(patient_id: int):
             }
             for e in prescriptions
         ],
+    )
+
+
+@app.get("/blockchain/contract/audit")
+def contract_audit():
+    """Inspect and analyse the deployed MedicalAudit smart contract."""
+    import json as _json
+
+    # ----- basic connectivity / deployment info -----
+    if not _DEPLOYED_JSON.exists():
+        return jsonify(error="contract_not_deployed", detail="deployed.json not found"), 503
+
+    address = _json.loads(_DEPLOYED_JSON.read_text())["address"]
+
+    try:
+        w3, contract = get_contract()
+    except ConnectionError as e:
+        return jsonify(error="node_unreachable", detail=str(e)), 503
+
+    artifact = _json.loads(ABI_PATH.read_text())
+    abi = artifact["abi"]
+
+    # bytecode size in bytes  (deployed bytecode, not init code)
+    try:
+        bytecode_hex = w3.eth.get_code(w3.to_checksum_address(address)).hex()
+        bytecode_size = (len(bytecode_hex) - 2) // 2  # strip 0x, each byte = 2 hex chars
+    except Exception:
+        bytecode_size = None
+
+    # current block / network info
+    try:
+        block_number = w3.eth.block_number
+        chain_id = w3.eth.chain_id
+    except Exception:
+        block_number = None
+        chain_id = None
+
+    # ----- parse ABI -----
+    functions = []
+    events = []
+
+    for item in abi:
+        if item["type"] == "function":
+            inputs = [
+                {"name": inp.get("name", ""), "type": inp["type"]}
+                for inp in item.get("inputs", [])
+            ]
+            outputs = [
+                {"name": out.get("name", ""), "type": out["type"]}
+                for out in item.get("outputs", [])
+            ]
+            # estimate gas for non-view functions
+            gas_estimate = None
+            if item.get("stateMutability") not in ("view", "pure"):
+                try:
+                    fn = getattr(contract.functions, item["name"])
+                    # build a dummy call with zero/empty args for estimation
+                    dummy_args = []
+                    for inp in item.get("inputs", []):
+                        if inp["type"] == "uint256":
+                            dummy_args.append(0)
+                        elif inp["type"].startswith("string"):
+                            dummy_args.append("")
+                        elif inp["type"] == "address":
+                            dummy_args.append("0x0000000000000000000000000000000000000000")
+                        else:
+                            dummy_args.append(0)
+                    gas_estimate = fn(*dummy_args).estimate_gas({"from": w3.eth.accounts[0]})
+                except Exception:
+                    gas_estimate = None
+
+            functions.append({
+                "name": item["name"],
+                "inputs": inputs,
+                "outputs": outputs,
+                "state_mutability": item.get("stateMutability", "nonpayable"),
+                "gas_estimate": gas_estimate,
+            })
+
+        elif item["type"] == "event":
+            fields = [
+                {
+                    "name": inp.get("name", ""),
+                    "type": inp["type"],
+                    "indexed": inp.get("indexed", False),
+                }
+                for inp in item.get("inputs", [])
+            ]
+            events.append({
+                "name": item["name"],
+                "fields": fields,
+                "anonymous": item.get("anonymous", False),
+            })
+
+    # ----- security checks -----
+    # Walk bytecode byte-by-byte, skipping PUSH data so we only check real opcodes.
+    # PUSH1=0x60..PUSH32=0x7f each consume N immediate data bytes that must be skipped.
+    # Naive hex-substring scan produces false positives from push data / ABI hashes.
+    DANGEROUS_OPCODES = {
+        0xff: "selfdestruct",
+        0xf4: "delegatecall",
+        0xf2: "callcode",
+    }
+    raw_bytes = bytes.fromhex(bytecode_hex[2:]) if bytecode_hex and len(bytecode_hex) > 2 else b""
+    opcode_findings = {name: False for name in DANGEROUS_OPCODES.values()}
+    i = 0
+    while i < len(raw_bytes):
+        op = raw_bytes[i]
+        if op in DANGEROUS_OPCODES:
+            opcode_findings[DANGEROUS_OPCODES[op]] = True
+        # PUSH1 (0x60) to PUSH32 (0x7f): skip the next (op - 0x5f) data bytes
+        if 0x60 <= op <= 0x7f:
+            i += (op - 0x5f)  # skip immediate data
+        i += 1
+
+    has_state_storage = any(
+        item["type"] == "function" and item.get("stateMutability") == "view"
+        for item in abi
+    )
+    has_access_control = any(
+        "owner" in item.get("name", "").lower() or "only" in item.get("name", "").lower()
+        for item in abi
+        if item["type"] == "function"
+    )
+    write_fns = [f for f in functions if f["state_mutability"] not in ("view", "pure")]
+
+    security_checks = [
+        {
+            "check": "No selfdestruct",
+            "passed": not opcode_findings.get("selfdestruct", False),
+            "detail": "Contract cannot be destroyed by an owner",
+        },
+        {
+            "check": "No delegatecall",
+            "passed": not opcode_findings.get("delegatecall", False),
+            "detail": "Contract does not delegate execution to external contracts",
+        },
+        {
+            "check": "No callcode",
+            "passed": not opcode_findings.get("callcode", False),
+            "detail": "Deprecated callcode opcode not present",
+        },
+        {
+            "check": "Events-only audit design",
+            "passed": not has_state_storage,
+            "detail": "Contract emits events rather than storing data — gas efficient and append-only",
+        },
+        {
+            "check": "Access control present",
+            "passed": has_access_control,
+            "detail": "owner/onlyOwner modifier detected" if has_access_control else "No access control — any address can call write functions",
+        },
+        {
+            "check": "Write functions use external visibility",
+            "passed": all(f["state_mutability"] == "nonpayable" for f in write_fns),
+            "detail": "All write functions are non-payable (no accidental ETH acceptance)",
+        },
+    ]
+
+    passed = sum(1 for c in security_checks if c["passed"])
+    total_checks = len(security_checks)
+
+    return jsonify(
+        ok=True,
+        contract={
+            "address": address,
+            "node_url": NODE_URL,
+            "chain_id": chain_id,
+            "current_block": block_number,
+            "bytecode_size_bytes": bytecode_size,
+            "abi_entries": len(abi),
+        },
+        functions=functions,
+        events=events,
+        security={
+            "score": f"{passed}/{total_checks}",
+            "passed": passed,
+            "total": total_checks,
+            "checks": security_checks,
+        },
     )

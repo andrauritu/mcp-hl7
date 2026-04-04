@@ -228,6 +228,26 @@ def blockchain_audit_summary(patient_id: int) -> dict:
     }
 
 
+@mcp.tool()
+def blockchain_audit_contract() -> dict:
+    """Audit the deployed MedicalAudit smart contract. Returns a full report: contract address,
+    bytecode size, all functions with gas estimates, all events with their fields,
+    and a security checklist (selfdestruct, delegatecall, access control, design patterns).
+    Use this to inspect what is actually deployed on-chain."""
+    _count("blockchain_audit_contract")
+    r = httpx.get(
+        f"{BLOCKCHAIN_API_BASE}/blockchain/contract/audit",
+        timeout=15.0,
+    )
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    return {"ok": True, **data}
+
+
 def main():
     mcp.run(transport="stdio")
 
