@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script> window.FontAwesomeConfig = { autoReplaceSvg: 'nest' }; </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-3.1.1.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        brand: {
+                            blue: '#3B82F6',
+                            dark: '#0F172A',
+                            surface: '#1E293B',
+                            light: '#F8FAFC',
+                            muted: '#64748B',
+                            parchment: '#FDFBF7',
+                            sage: '#8FBC8F',
+                            rose: '#D8BFD8',
+                            apricot: '#FFDAB9',
+                            coral: '#FF7F50',
+                            teal: '#008080'
+                        }
+                    },
+                    backgroundImage: {
+                        'paper-texture': "url('https://www.transparenttextures.com/patterns/cream-paper.png')",
+                    },
+                    borderRadius: {
+                        '4xl': '2rem',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+        body { margin: 0; padding: 0; background-color: #FDFBF7; font-family: 'Inter', sans-serif; background-image: url('https://www.transparenttextures.com/patterns/cream-paper.png'); }
+        ::-webkit-scrollbar { display: none; }
+        .glass-panel { background: rgba(253, 251, 247, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        .scribble-underline { position: relative; display: inline-block; }
+        .scribble-underline::after { content: ''; position: absolute; bottom: -4px; left: 0; width: 100%; height: 6px; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 5 Q 25 0, 50 5 T 100 5" stroke="%23FF7F50" stroke-width="2" fill="none"/></svg>'); background-size: 100% 100%; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased h-full min-h-screen flex flex-col relative">
+
+    <!-- Sticky Header -->
+    <header id="header" class="sticky top-0 z-50 glass-panel border-b border-slate-200/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] px-6 py-4 flex items-center justify-between transition-all">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-[1.5rem] bg-brand-coral/10 flex items-center justify-center text-brand-coral shadow-sm border border-brand-coral/20">
+                <i class="fa-solid fa-staff-snake text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-serif font-bold text-slate-900 leading-tight tracking-tight">MCP-HL7 Medical System</h1>
+                <p class="text-sm text-slate-500 font-medium font-sans">HL7 + Blockchain Audit Dashboard</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 bg-white/50 px-4 py-2 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+                <div class="w-2.5 h-2.5 rounded-full bg-brand-sage shadow-[0_0_8px_rgba(143,188,143,0.5)]"></div>
+                <span class="text-xs font-semibold text-slate-700 tracking-wide uppercase">API</span>
+            </div>
+            <div class="flex items-center gap-2 bg-white/50 px-4 py-2 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+                <div class="w-2.5 h-2.5 rounded-full bg-brand-sage shadow-[0_0_8px_rgba(143,188,143,0.5)]"></div>
+                <span class="text-xs font-semibold text-slate-700 tracking-wide uppercase">Blockchain</span>
+            </div>
+            <div class="flex items-center gap-2 bg-white/50 px-4 py-2 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+                <div class="w-2.5 h-2.5 rounded-full bg-brand-sage shadow-[0_0_8px_rgba(143,188,143,0.5)]"></div>
+                <span class="text-xs font-semibold text-slate-700 tracking-wide uppercase">HL7 Receiver</span>
+            </div>
+            
+            <div class="h-8 w-px bg-slate-200/50 mx-2"></div>
+            
+            <div class="flex items-center gap-4">
+                <button class="w-12 h-12 rounded-full bg-white/50 flex items-center justify-center text-slate-600 hover:bg-white transition-colors border border-slate-200/50 shadow-sm">
+                    <i class="fa-regular fa-bell text-lg"></i>
+                </button>
+                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-4.jpg" alt="User" class="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-6 lg:p-8 max-w-[1440px] mx-auto w-full flex flex-col gap-8">
+
+        <!-- Action Zone Grid - Bento Style -->
+        <section id="action-zone" class="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[280px]">
+            
+            <!-- Card 1: New Patient (Large) -->
+            <div class="md:col-span-6 bg-white rounded-[2rem] shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-8 flex flex-col h-full hover:shadow-[0_12px_40px_-4px_rgba(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-brand-apricot/20 rounded-bl-[4rem] transition-transform group-hover:scale-110 duration-500"></div>
+                <div class="flex items-center gap-4 mb-6 relative z-10">
+                    <div class="w-12 h-12 rounded-2xl bg-brand-apricot/20 flex items-center justify-center text-brand-coral">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                    </div>
+                    <h2 class="text-2xl font-serif font-bold text-slate-800">New Patient</h2>
+                </div>
+                <div class="space-y-5 flex-1 relative z-10">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wider">Full Name</label>
+                        <input type="text" placeholder="e.g. Jane Doe" class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-coral/50 focus:border-brand-coral/50 transition-all font-medium">
+                    </div>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wider">DOB</label>
+                            <input type="date" class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-coral/50 focus:border-brand-coral/50 transition-all font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wider">Sex</label>
+                            <select class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-coral/50 focus:border-brand-coral/50 transition-all font-medium appearance-none">
+                                <option>Male</option>
+                                <option>Female</option>
+                                <option>Unknown</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-6 w-full bg-brand-coral hover:bg-[#ff6b3d] text-white font-medium py-3.5 rounded-xl text-sm transition-all shadow-lg shadow-brand-coral/20 flex items-center justify-center gap-2 relative z-10">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    Create Patient Record
+                </button>
+            </div>
+
+            <!-- Card 2: Add Diagnosis (Medium) -->
+            <div class="md:col-span-3 bg-white rounded-[2rem] shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-8 flex flex-col h-full hover:shadow-[0_12px_40px_-4px_rgba(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-brand-sage/20 rounded-bl-[3rem] transition-transform group-hover:scale-110 duration-500"></div>
+                <div class="flex items-center gap-3 mb-6 relative z-10">
+                    <div class="w-10 h-10 rounded-xl bg-brand-sage/20 flex items-center justify-center text-brand-teal">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    </div>
+                    <h2 class="text-xl font-serif font-bold text-slate-800">Diagnosis</h2>
+                </div>
+                <div class="space-y-4 flex-1 relative z-10">
+                    <div>
+                        <select class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-teal/50 focus:border-brand-teal/50 transition-all font-medium appearance-none">
+                            <option>Select Patient...</option>
+                            <option>Ruben George (ID: P-892)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="relative">
+                            <i class="fa-solid fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" placeholder="ICD-10 Code..." class="w-full pl-10 pr-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal/50 focus:border-brand-teal/50 transition-all font-medium">
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-auto w-full bg-brand-teal hover:bg-[#006666] text-white font-medium py-3 rounded-xl text-sm transition-all shadow-lg shadow-brand-teal/20 flex items-center justify-center gap-2 relative z-10">
+                    Add Record
+                </button>
+            </div>
+
+            <!-- Card 3: New Prescription (Medium) -->
+            <div class="md:col-span-3 bg-white rounded-[2rem] shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-8 flex flex-col h-full hover:shadow-[0_12px_40px_-4px_rgba(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden group">
+                 <div class="absolute top-0 right-0 w-24 h-24 bg-brand-rose/20 rounded-bl-[3rem] transition-transform group-hover:scale-110 duration-500"></div>
+                <div class="flex items-center gap-3 mb-6 relative z-10">
+                    <div class="w-10 h-10 rounded-xl bg-brand-rose/20 flex items-center justify-center text-[#9932CC]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    </div>
+                    <h2 class="text-xl font-serif font-bold text-slate-800">Prescription</h2>
+                </div>
+                <div class="space-y-4 flex-1 relative z-10">
+                     <select class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#9932CC]/50 focus:border-[#9932CC]/50 transition-all font-medium appearance-none">
+                            <option>Select Patient...</option>
+                            <option>Ruben George</option>
+                        </select>
+                    <input type="text" placeholder="Medication..." class="w-full px-4 py-3 bg-slate-50/50 border border-slate-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#9932CC]/50 focus:border-[#9932CC]/50 transition-all font-medium">
+                </div>
+                <button class="mt-auto w-full bg-[#9932CC] hover:bg-[#8A2BE2] text-white font-medium py-3 rounded-xl text-sm transition-all shadow-lg shadow-[#9932CC]/20 flex items-center justify-center gap-2 relative z-10">
+                    Prescribe
+                </button>
+            </div>
+            
+        </section>
+
+        <!-- Data Zone - Organic Layout -->
+        <section id="data-zone" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Main Content Area: Patients & Charts -->
+            <div class="lg:col-span-8 flex flex-col gap-8">
+                
+                <!-- Patient Directory Bento -->
+                <div class="bg-white rounded-[2rem] shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden flex flex-col relative">
+                     <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-coral via-brand-apricot to-brand-sage"></div>
+                    <div class="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-serif font-bold text-slate-800 mb-1">Patient Directory</h3>
+                            <p class="text-sm text-slate-500 font-medium">Active roster and recent updates</p>
+                        </div>
+                        <button class="px-4 py-2 text-sm font-medium bg-brand-parchment border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-all shadow-sm">
+                            <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Export
+                        </button>
+                    </div>
+                    <div class="p-4">
+                        <div class="overflow-x-auto rounded-xl border border-slate-100">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50/50 text-xs uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">
+                                        <th class="px-6 py-4">Patient</th>
+                                        <th class="px-6 py-4">Demographics</th>
+                                        <th class="px-6 py-4">Status</th>
+                                        <th class="px-6 py-4 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm divide-y divide-slate-50">
+                                    <tr class="hover:bg-brand-parchment/50 transition-colors group cursor-pointer">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-4">
+                                                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm">
+                                                <div>
+                                                    <div class="font-bold text-slate-800">Ruben George</div>
+                                                    <div class="font-mono text-slate-400 text-xs mt-0.5">ID: P-892</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-slate-700 font-medium">35 yrs <span class="text-slate-300 mx-1">|</span> Male</div>
+                                            <div class="text-slate-500 text-xs mt-0.5">DOB: 12/04/1988</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-brand-apricot/20 text-brand-coral border border-brand-apricot/30">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-brand-coral mr-2"></span> Active Tx
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <button class="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors ml-auto">
+                                                <i class="fa-solid fa-arrow-right -rotate-45"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr class="hover:bg-brand-parchment/50 transition-colors group cursor-pointer">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-4">
+                                                <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-5.jpg" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm">
+                                                <div>
+                                                    <div class="font-bold text-slate-800">Sarah Jenkins</div>
+                                                    <div class="font-mono text-slate-400 text-xs mt-0.5">ID: P-104</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-slate-700 font-medium">32 yrs <span class="text-slate-300 mx-1">|</span> Female</div>
+                                            <div class="text-slate-500 text-xs mt-0.5">DOB: 05/22/1992</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-brand-sage/20 text-brand-teal border border-brand-sage/30">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-brand-teal mr-2"></span> Stable
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <button class="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors ml-auto">
+                                                <i class="fa-solid fa-arrow-right -rotate-45"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vital Trends Sketch Chart -->
+                <div class="bg-white rounded-[2rem] shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-8 flex flex-col relative">
+                    <h3 class="text-2xl font-serif font-bold text-slate-800 mb-6">Population <span class="scribble-underline">Vitals Trend</span></h3>
+                    <div id="vitalsChart" class="h-[300px] w-full"></div>
+                </div>
+
+            </div>
+
+            <!-- Sidebar Area: Chain Lens & Audit -->
+            <div class="lg:col-span-4 flex flex-col gap-8">
+                
+                <!-- Chain Lens Explorer (Creative Dark Mode) -->
+                <div class="bg-[#1A1A24] rounded-[2rem] shadow-xl border border-slate-800 overflow-hidden flex flex-col relative text-slate-300 h-[450px]">
+                    <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 pointer-events-none"></div>
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-brand-coral/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+                    <div class="absolute bottom-0 left-0 w-64 h-64 bg-brand-teal/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none"></div>
+                    
+                    <div class="px-6 py-5 border-b border-slate-800/50 flex items-center justify-between z-10 bg-[#1A1A24]/80 backdrop-blur-md">
+                        <h3 class="text-lg font-serif font-bold text-white flex items-center gap-3">
+                            <span class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/5">
+                                <i class="fa-solid fa-link text-brand-apricot text-sm"></i>
+                            </span>
+                            Chain Lens
+                        </h3>
+                        <div class="flex items-center gap-2 bg-brand-teal/10 px-3 py-1 rounded-full border border-brand-teal/20">
+                            <div class="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse shadow-[0_0_8px_rgba(0,128,128,0.8)]"></div>
+                            <span class="text-[10px] font-mono text-brand-teal font-bold uppercase tracking-wider">Live</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-4 z-10 space-y-3">
+                        <!-- Event Item 1 -->
+                        <div class="bg-white/5 rounded-xl p-4 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-apricot/20 text-brand-apricot border border-brand-apricot/20 uppercase tracking-wider">
+                                    ADT^A01
+                                </span>
+                                <span class="text-slate-500 text-xs font-mono">14:22:01</span>
+                            </div>
+                            <div class="text-sm text-slate-300 font-medium mb-1">State: ADMITTED_WARD_B</div>
+                            <div class="flex justify-between items-center mt-3 pt-3 border-t border-white/5">
+                                <span class="text-slate-400 text-xs font-mono">P-892</span>
+                                <span class="text-brand-teal text-xs font-mono group-hover:text-brand-apricot transition-colors">0x7f8a...9b2c</span>
+                            </div>
+                        </div>
+                        <!-- Event Item 2 -->
+                        <div class="bg-white/5 rounded-xl p-4 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#D8BFD8]/20 text-[#D8BFD8] border border-[#D8BFD8]/20 uppercase tracking-wider">
+                                    RDE^O11
+                                </span>
+                                <span class="text-slate-500 text-xs font-mono">14:15:33</span>
+                            </div>
+                            <div class="text-sm text-slate-300 font-medium mb-1">Rx: Ibuprofen 800mg</div>
+                            <div class="flex justify-between items-center mt-3 pt-3 border-t border-white/5">
+                                <span class="text-slate-400 text-xs font-mono">P-892</span>
+                                <span class="text-brand-teal text-xs font-mono group-hover:text-brand-apricot transition-colors">0x2a1b...4c9f</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contract Audit Panel -->
+                <div class="bg-brand-parchment rounded-[2rem] shadow-inner border border-slate-200 p-6 flex flex-col relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-2xl opacity-50 pointer-events-none"></div>
+                    
+                    <h3 class="text-xl font-serif font-bold text-slate-800 mb-4 relative z-10">Smart Contract</h3>
+                    
+                    <div class="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/50 mb-6 relative z-10 shadow-sm">
+                        <div class="space-y-3 text-sm font-medium">
+                            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                <span class="text-slate-500">Status</span> 
+                                <span class="text-brand-teal flex items-center gap-1"><i class="fa-solid fa-shield-check"></i> Verified</span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                <span class="text-slate-500">Version</span> 
+                                <span class="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded">v2.1.4</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500">Last Audit</span> 
+                                <span class="text-slate-700">2 days ago</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="mt-auto w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3.5 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 relative z-10 group">
+                        <i class="fa-solid fa-fingerprint group-hover:scale-110 transition-transform"></i> Run Security Audit
+                    </button>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Initialize Charts
+        function initializeCharts() {
+            try {
+                // Vitals Trend Chart (Spline Area)
+                const vitalsData = [
+                    {
+                        x: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        y: [120, 118, 122, 119, 125, 121, 118],
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Systolic',
+                        line: { shape: 'spline', smoothing: 1.3, color: '#FF7F50', width: 3 },
+                        fill: 'tozeroy',
+                        fillcolor: 'rgba(255, 127, 80, 0.1)'
+                    },
+                    {
+                        x: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        y: [80, 78, 82, 79, 85, 81, 78],
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Diastolic',
+                        line: { shape: 'spline', smoothing: 1.3, color: '#008080', width: 3 },
+                        fill: 'tozeroy',
+                        fillcolor: 'rgba(0, 128, 128, 0.1)'
+                    }
+                ];
+
+                const vitalsLayout = {
+                    margin: { t: 10, r: 10, b: 30, l: 30 },
+                    plot_bgcolor: 'transparent',
+                    paper_bgcolor: 'transparent',
+                    showlegend: true,
+                    legend: { orientation: 'h', y: -0.2, font: { family: 'Inter', color: '#64748B' } },
+                    xaxis: { 
+                        showgrid: false, 
+                        tickfont: { family: 'Inter', color: '#94A3B8' },
+                        linecolor: '#E2E8F0'
+                    },
+                    yaxis: { 
+                        showgrid: true, 
+                        gridcolor: '#F1F5F9', 
+                        gridwidth: 1,
+                        griddash: 'dash',
+                        tickfont: { family: 'Inter', color: '#94A3B8' },
+                        zeroline: false
+                    }
+                };
+
+                Plotly.newPlot('vitalsChart', vitalsData, vitalsLayout, {responsive: true, displayModeBar: false});
+            } catch(e) {
+                console.error('Chart initialization failed:', e);
+            }
+        }
+
+        window.addEventListener('load', initializeCharts);
+        setTimeout(initializeCharts, 1200);
+    </script>
+</body>
+</html>

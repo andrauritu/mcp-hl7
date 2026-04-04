@@ -2,7 +2,7 @@ import os
 import re
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, make_response
 
 from db import init_db, get_db
 from hl7_builder import build_adt_a04, build_rde_o11
@@ -13,9 +13,54 @@ BLOCKCHAIN_API_URL = os.environ.get("BLOCKCHAIN_API_URL", "http://127.0.0.1:8001
 app = Flask(__name__)
 init_db()
 
+
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+
+@app.get("/patients/full")
+def list_patients_full():
+    """Return patients with their diagnoses and prescriptions embedded — used by the dashboard."""
+    limit_raw = request.args.get("limit", "100")
+    try:
+        limit = max(1, min(200, int(limit_raw)))
+    except ValueError:
+        return jsonify(error="invalid_limit"), 400
+
+    with get_db() as conn:
+        patients = [dict(r) for r in conn.execute(
+            "SELECT id, name, dob, sex, created_at FROM patients ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()]
+
+        for p in patients:
+            p["diagnoses"] = [dict(r) for r in conn.execute(
+                """SELECT d.icd_code, c.description, d.created_at
+                   FROM diagnoses d JOIN icd_codes c ON c.code = d.icd_code
+                   WHERE d.patient_id = ? ORDER BY d.created_at ASC""",
+                (p["id"],),
+            ).fetchall()]
+            p["prescriptions"] = [dict(r) for r in conn.execute(
+                """SELECT medication_name, atc_code, dose, unit, frequency, route, created_at
+                   FROM prescriptions WHERE patient_id = ? ORDER BY created_at ASC""",
+                (p["id"],),
+            ).fetchall()]
+
+    return jsonify(patients=patients, count=len(patients))
+
+
 @app.get('/health')
 def health():
-    return jsonify(status="ok") 
+    return jsonify(status="ok")
 
 @app.post('/patients')
 def create_patient():
@@ -193,6 +238,88 @@ def icd_get(code: str):
     if row is None:
         return jsonify(error="icd_code_not_found", code=code), 404
     
+    return jsonify(dict(row))
+
+
+# ── ATC (medication) search ─────────────────────────────────────────────────────
+
+@app.get("/atc/search")
+def atc_search():
+    q = str(request.args.get("q", "")).strip()
+    limit_raw = request.args.get("limit") or "6"
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        return jsonify(error="invalid_limit"), 400
+    limit = max(1, min(20, limit))
+
+    if not q:
+        return jsonify(error="empty_query", results=[]), 400
+
+    tokens = re.findall(r"[a-z0-9]+", q.lower())
+    if not tokens:
+        return jsonify(error="invalid_query", results=[]), 400
+
+    looks_like_code = bool(re.fullmatch(r"[a-z][0-9]{2}[a-z]{0,2}[0-9]{0,2}", q.lower()))
+
+    with get_db() as conn:
+        # Tier 1: code exact / prefix
+        if looks_like_code:
+            rows = conn.execute(
+                """SELECT code, name, ddd, uom, adm_route
+                   FROM atc_codes
+                   WHERE code = ? OR code LIKE ?
+                   ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END, code
+                   LIMIT ?""",
+                (q.upper(), f"{q.upper()}%", q.upper(), limit),
+            ).fetchall()
+            if rows:
+                return jsonify(query=q, limit=limit, mode="code_exact",
+                               tokens=tokens, results=[dict(r) for r in rows])
+
+        # Tier 2: FTS5 + BM25
+        fts_query = " ".join(tokens)
+        rows = conn.execute(
+            """SELECT c.code, c.name, c.ddd, c.uom, c.adm_route
+               FROM atc_fts f
+               JOIN atc_codes c ON c.code = f.code
+               WHERE f.name MATCH ?
+               ORDER BY bm25(atc_fts)
+               LIMIT ?""",
+            (fts_query, limit),
+        ).fetchall()
+        if rows:
+            return jsonify(query=q, limit=limit, mode="fts",
+                           tokens=tokens, results=[dict(r) for r in rows])
+
+        # Tier 3: LIKE fallback
+        clauses = []
+        params = []
+        for t in tokens:
+            clauses.append("LOWER(name) LIKE ?")
+            params.append(f"%{t}%")
+        rows = conn.execute(
+            f"""SELECT code, name, ddd, uom, adm_route
+                FROM atc_codes
+                WHERE {' AND '.join(clauses)}
+                LIMIT ?""",
+            (*params, limit),
+        ).fetchall()
+
+    return jsonify(query=q, limit=limit, mode="like",
+                   tokens=tokens, results=[dict(r) for r in rows])
+
+
+@app.get("/atc/<code>")
+def atc_get(code: str):
+    code = code.strip().upper()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT code, name, ddd, uom, adm_route FROM atc_codes WHERE code = ?",
+            (code,),
+        ).fetchone()
+    if row is None:
+        return jsonify(error="atc_code_not_found", code=code), 404
     return jsonify(dict(row))
 
 
@@ -530,6 +657,7 @@ def create_prescription(patient_id: int):
     body = request.get_json(force=True) or {}
 
     medication_name = (body.get("medication_name") or "").strip()
+    atc_code = (body.get("atc_code") or "").strip().upper() or None
     dose = (body.get("dose") or "").strip()
     unit = (body.get("unit") or "").strip()
     frequency = (body.get("frequency") or "").strip()
@@ -564,9 +692,9 @@ def create_prescription(patient_id: int):
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO prescriptions
-               (patient_id, medication_name, dose, unit, frequency, route, prescriber, icd_code)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (patient_id, medication_name, dose, unit, frequency, route, prescriber, icd_code),
+               (patient_id, medication_name, atc_code, dose, unit, frequency, route, prescriber, icd_code)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, medication_name, atc_code, dose, unit, frequency, route, prescriber, icd_code),
         )
         conn.commit()
         rx_id = cur.lastrowid
@@ -577,6 +705,7 @@ def create_prescription(patient_id: int):
         dob=patient["dob"],
         sex=patient["sex"],
         medication_name=medication_name,
+        atc_code=atc_code,
         dose=dose,
         unit=unit,
         frequency=frequency,
@@ -650,7 +779,7 @@ def create_prescription(patient_id: int):
 def list_prescriptions(patient_id: int):
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, patient_id, medication_name, dose, unit, frequency,
+            """SELECT id, patient_id, medication_name, atc_code, dose, unit, frequency,
                       route, prescriber, icd_code, created_at
                FROM prescriptions
                WHERE patient_id = ?

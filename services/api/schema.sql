@@ -22,6 +22,21 @@ USING fts5(code, description);
 
 CREATE INDEX IF NOT EXISTS idx_icd_code ON icd_codes(code);
 
+CREATE TABLE IF NOT EXISTS atc_codes (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    ddd TEXT,
+    uom TEXT,
+    adm_route TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_atc_name ON atc_codes(name);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS atc_fts
+USING fts5(code, name);
+
+CREATE INDEX IF NOT EXISTS idx_atc_code ON atc_codes(code);
+
 CREATE TABLE IF NOT EXISTS diagnoses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
@@ -39,6 +54,7 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
     medication_name TEXT NOT NULL,
+    atc_code TEXT,
     dose TEXT NOT NULL,
     unit TEXT NOT NULL,
     frequency TEXT NOT NULL,
@@ -47,7 +63,8 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     icd_code TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (patient_id) REFERENCES patients(id),
-    FOREIGN KEY (icd_code) REFERENCES icd_codes(code)
+    FOREIGN KEY (icd_code) REFERENCES icd_codes(code),
+    FOREIGN KEY (atc_code) REFERENCES atc_codes(code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id);

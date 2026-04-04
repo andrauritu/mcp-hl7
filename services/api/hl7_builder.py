@@ -78,6 +78,7 @@ def build_rde_o11(
     frequency: str,
     route: str,
     prescriber: str = "Dr. MCP",
+    atc_code: str | None = None,
     icd_code: str | None = None,
     icd_description: str | None = None,
     message_control_id: str | None = None,
@@ -135,10 +136,16 @@ def build_rde_o11(
     ])
     segments.append(orc)
 
+    # RXE-2: Give Code — use HL7 CE (Coded Element): code^text^coding_system
+    if atc_code:
+        give_code = f"{atc_code}^{medication_name}^ATC"
+    else:
+        give_code = medication_name
+
     rxe = _FIELD_SEP.join([
         "RXE",
         "",
-        medication_name,
+        give_code,
         dose,
         unit,
         "",

@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP-HL7 Medical Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>window.FontAwesomeConfig={autoReplaceSvg:'nest'};</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans:['Inter','sans-serif'], serif:['Playfair Display','serif'] },
+          colors: {
+            brand: {
+              blue:'#3B82F6', dark:'#0F172A', surface:'#1E293B', light:'#F8FAFC',
+              muted:'#64748B', parchment:'#FDFBF7', sage:'#8FBC8F', rose:'#D8BFD8',
+              apricot:'#FFDAB9', coral:'#FF7F50', teal:'#008080'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { margin:0; padding:0; background:#FDFBF7 url('https://www.transparenttextures.com/patterns/cream-paper.png'); font-family:'Inter',sans-serif; }
+    ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .glass-panel { background:rgba(253,251,247,.7); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,.5); }
+    .scribble-underline { position:relative; display:inline-block; }
+    .scribble-underline::after { content:''; position:absolute; bottom:-4px; left:0; width:100%; height:6px;
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 5 Q 25 0, 50 5 T 100 5" stroke="%23FF7F50" stroke-width="2" fill="none"/></svg>');
+      background-size:100% 100%; }
+    .health-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    .health-dot.green { background:#8FBC8F; box-shadow:0 0 8px rgba(143,188,143,.5); animation:hdpulse 2s infinite; }
+    .health-dot.red { background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,.4); }
+    @keyframes hdpulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .bento-card { background:#fff; border-radius:2rem; box-shadow:0 8px 30px -4px rgba(0,0,0,.05); border:1px solid #f1f5f9;
+      transition:all .3s; position:relative; overflow:hidden; }
+    .bento-card:hover { box-shadow:0 12px 40px -4px rgba(0,0,0,.08); }
+    .bento-card .corner-blob { position:absolute; top:0; right:0; border-bottom-left-radius:3rem; transition:transform .5s; pointer-events:none; }
+    .bento-card:hover .corner-blob { transform:scale(1.1); }
+    .input-field { width:100%; padding:.65rem 1rem; background:rgba(248,250,252,.5); border:1px solid rgba(226,232,240,.6);
+      border-radius:.75rem; font-size:.85rem; outline:none; transition:all .2s; font-family:'Inter',sans-serif; }
+    .input-field:focus { box-shadow:0 0 0 3px rgba(255,127,80,.15); border-color:rgba(255,127,80,.5); }
+    .input-field.teal:focus { box-shadow:0 0 0 3px rgba(0,128,128,.15); border-color:rgba(0,128,128,.5); }
+    .input-field.purple:focus { box-shadow:0 0 0 3px rgba(153,50,204,.15); border-color:rgba(153,50,204,.5); }
+    .input-field.green:focus { box-shadow:0 0 0 3px rgba(143,188,143,.2); border-color:rgba(143,188,143,.6); }
+    select.input-field { appearance:none; background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+      background-repeat:no-repeat; background-position:right .7rem center; background-size:.65em auto; padding-right:2.2rem; }
+    .btn-coral { background:#FF7F50; color:#fff; border:none; padding:.7rem 1.25rem; border-radius:.75rem; font-size:.85rem; font-weight:500;
+      cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(255,127,80,.2); font-family:'Inter',sans-serif; }
+    .btn-coral:hover { background:#ff6b3d; }
+    .btn-teal { background:#008080; color:#fff; border:none; padding:.7rem 1.25rem; border-radius:.75rem; font-size:.85rem; font-weight:500;
+      cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(0,128,128,.2); font-family:'Inter',sans-serif; }
+    .btn-teal:hover { background:#006666; }
+    .btn-purple { background:#9932CC; color:#fff; border:none; padding:.7rem 1.25rem; border-radius:.75rem; font-size:.85rem; font-weight:500;
+      cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(153,50,204,.2); font-family:'Inter',sans-serif; }
+    .btn-purple:hover { background:#8A2BE2; }
+    .btn-sage { background:#6b8e6b; color:#fff; border:none; padding:.7rem 1.25rem; border-radius:.75rem; font-size:.85rem; font-weight:500;
+      cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(107,142,107,.2); font-family:'Inter',sans-serif; }
+    .btn-sage:hover { background:#5a7d5a; }
+    .btn-dark { background:#1e293b; color:#fff; border:none; padding:.7rem 1.25rem; border-radius:.75rem; font-size:.85rem; font-weight:500;
+      cursor:pointer; transition:all .2s; box-shadow:0 4px 14px rgba(30,41,59,.15); font-family:'Inter',sans-serif; }
+    .btn-dark:hover { background:#0f172a; }
+    .btn-ghost { background:rgba(248,250,252,.5); border:1px solid #e2e8f0; padding:.45rem .9rem; border-radius:.75rem; font-size:.75rem;
+      font-weight:500; color:#475569; cursor:pointer; transition:all .2s; font-family:'Inter',sans-serif; }
+    .btn-ghost:hover { background:#f1f5f9; }
+    .label { display:block; font-size:.68rem; font-weight:500; color:#64748B; margin-bottom:.35rem; text-transform:uppercase; letter-spacing:.06em; }
+    .mono { font-family:'Cascadia Code','Fira Code','Consolas',monospace; }
+    .badge-icd { display:inline-flex; align-items:center; padding:.1rem .35rem; border-radius:9999px; font-size:.6rem; font-weight:700;
+      background:rgba(255,218,185,.3); color:#FF7F50; border:1px solid rgba(255,218,185,.5); margin-right:.25rem; margin-bottom:.1rem; }
+    .badge-med { display:inline-flex; align-items:center; padding:.1rem .35rem; border-radius:9999px; font-size:.6rem; font-weight:700;
+      background:rgba(216,191,216,.25); color:#9932CC; border:1px solid rgba(216,191,216,.4); margin-right:.25rem; margin-bottom:.1rem; }
+    /* Chain Lens dark card */
+    .chain-card { background:#1A1A24; border-radius:2rem; box-shadow:0 12px 40px rgba(0,0,0,.15); border:1px solid #2d2d3a;
+      position:relative; overflow:hidden; color:#cbd5e1; }
+    .chain-card::before { content:''; position:absolute; inset:0;
+      background:url('https://www.transparenttextures.com/patterns/stardust.png'); opacity:.2; pointer-events:none; }
+    .chain-glow-coral { position:absolute; width:16rem; height:16rem; background:rgba(255,127,80,.07); border-radius:50%;
+      filter:blur(60px); top:-5rem; right:-5rem; pointer-events:none; }
+    .chain-glow-teal { position:absolute; width:16rem; height:16rem; background:rgba(0,128,128,.07); border-radius:50%;
+      filter:blur(60px); bottom:-5rem; left:-5rem; pointer-events:none; }
+    .chain-event { background:rgba(255,255,255,.04); border-radius:.75rem; padding:.85rem 1rem; border:1px solid rgba(255,255,255,.05);
+      cursor:pointer; transition:background .2s; }
+    .chain-event:hover { background:rgba(255,255,255,.08); }
+    .chain-badge-adm  { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .5rem; border-radius:.25rem; font-size:.6rem;
+      font-weight:700; letter-spacing:.06em; text-transform:uppercase; background:rgba(255,218,185,.15); color:#FFDAB9; border:1px solid rgba(255,218,185,.2); }
+    .chain-badge-dx   { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .5rem; border-radius:.25rem; font-size:.6rem;
+      font-weight:700; letter-spacing:.06em; text-transform:uppercase; background:rgba(143,188,143,.15); color:#8FBC8F; border:1px solid rgba(143,188,143,.2); }
+    .chain-badge-rx   { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .5rem; border-radius:.25rem; font-size:.6rem;
+      font-weight:700; letter-spacing:.06em; text-transform:uppercase; background:rgba(216,191,216,.15); color:#D8BFD8; border:1px solid rgba(216,191,216,.2); }
+    .tx-hash { font-family:'Cascadia Code','Fira Code','Consolas',monospace; font-size:.7rem; color:#008080; cursor:pointer; transition:color .2s; }
+    .tx-hash:hover { color:#FFDAB9; }
+    .flash-new { animation:flashIn .8s ease-out; }
+    @keyframes flashIn { from{background:rgba(143,188,143,.15)} to{background:transparent} }
+    .chain-filter-btn { padding:.3rem .75rem; border-radius:9999px; font-size:.65rem; font-weight:600; letter-spacing:.04em;
+      text-transform:uppercase; border:1px solid rgba(255,255,255,.1); background:transparent; color:#94a3b8; cursor:pointer; transition:all .2s; }
+    .chain-filter-btn:hover { background:rgba(255,255,255,.05); }
+    .chain-filter-btn.active { background:rgba(255,255,255,.1); color:#fff; }
+    .chain-filter-btn.active-adm { background:rgba(255,218,185,.15); color:#FFDAB9; border-color:rgba(255,218,185,.3); }
+    .chain-filter-btn.active-dx  { background:rgba(143,188,143,.15); color:#8FBC8F; border-color:rgba(143,188,143,.3); }
+    .chain-filter-btn.active-rx  { background:rgba(216,191,216,.15); color:#D8BFD8; border-color:rgba(216,191,216,.3); }
+    .chain-search { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:.5rem; padding:.35rem .7rem;
+      font-size:.75rem; color:#e2e8f0; outline:none; font-family:'Inter',sans-serif; transition:border-color .2s; width:160px; }
+    .chain-search:focus { border-color:rgba(0,128,128,.5); }
+    .chain-search::placeholder { color:#64748b; }
+    /* ICD dropdown */
+    .icd-dropdown { position:absolute; z-index:1000; background:#fff; border:1px solid #e2e8f0; border-radius:.75rem;
+      max-height:200px; overflow-y:auto; width:100%; box-shadow:0 8px 24px rgba(0,0,0,.1); }
+    .icd-option { padding:.5rem .75rem; cursor:pointer; font-size:.8rem; transition:background .15s; }
+    .icd-option:hover { background:#FDFBF7; }
+    /* Toast */
+    #toast-container { position:fixed; top:80px; right:16px; z-index:9999; min-width:320px; }
+    .toast-msg { padding:.7rem 1rem; border-radius:.75rem; font-size:.82rem; display:flex; align-items:start; gap:.5rem;
+      box-shadow:0 4px 16px rgba(0,0,0,.1); margin-bottom:.5rem; animation:slideIn .3s ease-out; }
+    .toast-success { background:#fff; border:1px solid #8FBC8F; border-left:4px solid #008080; }
+    .toast-danger  { background:#fff; border:1px solid #fca5a5; border-left:4px solid #ef4444; }
+    @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+    .toast-close { background:none; border:none; cursor:pointer; color:#94a3b8; margin-left:auto; font-size:1rem; }
+    /* Audit */
+    .audit-pass { color:#008080; } .audit-fail { color:#ef4444; }
+    /* Gradient bar */
+    .gradient-bar { height:3px; background:linear-gradient(to right,#FF7F50,#FFDAB9,#8FBC8F); border-radius:2px; }
+    /* Patient timeline */
+    .timeline-dot { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .timeline-dot-adm { background:rgba(255,218,185,.2); color:#FF7F50; }
+    .timeline-dot-dx  { background:rgba(143,188,143,.2); color:#008080; }
+    .timeline-dot-rx  { background:rgba(216,191,216,.2); color:#9932CC; }
+    /* Spinner */
+    .spinner { width:1rem; height:1rem; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; display:inline-block; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .admit-result { font-size:.8rem; }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen">
+
+<!-- ═══════════ HEADER ═══════════ -->
+<header class="sticky top-0 z-50 glass-panel border-b border-slate-200/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] px-6 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-4">
+    <div class="w-11 h-11 rounded-[1.2rem] bg-brand-coral/10 flex items-center justify-center text-brand-coral shadow-sm border border-brand-coral/20">
+      <i class="fa-solid fa-staff-snake text-xl"></i>
+    </div>
+    <div>
+      <h1 class="text-xl font-serif font-bold text-slate-900 leading-tight tracking-tight">MCP-HL7 Medical System</h1>
+      <p class="text-xs text-slate-500 font-medium">HL7 + Blockchain Audit Dashboard</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-5">
+    <div class="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+      <span class="health-dot red" id="dot-api"></span>
+      <span class="text-[11px] font-semibold text-slate-700 tracking-wide uppercase">API</span>
+    </div>
+    <div class="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+      <span class="health-dot red" id="dot-bc"></span>
+      <span class="text-[11px] font-semibold text-slate-700 tracking-wide uppercase">Blockchain</span>
+    </div>
+    <div class="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-full border border-slate-200/50 shadow-sm backdrop-blur-sm">
+      <span class="health-dot red" id="dot-hl7"></span>
+      <span class="text-[11px] font-semibold text-slate-700 tracking-wide uppercase">HL7 Receiver</span>
+    </div>
+  </div>
+</header>
+
+<div id="toast-container"></div>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main class="p-6 lg:p-8 max-w-[1440px] mx-auto w-full flex flex-col gap-8">
+
+  <!-- ── ACTION ZONE ── -->
+  <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+    <!-- NEW PATIENT -->
+    <div class="bento-card p-6 flex flex-col">
+      <div class="corner-blob w-32 h-32 bg-brand-apricot/20"></div>
+      <div class="flex items-center gap-3 mb-4 relative z-10">
+        <div class="w-10 h-10 rounded-xl bg-brand-apricot/20 flex items-center justify-center text-brand-coral">
+          <i class="fa-solid fa-user-plus"></i>
+        </div>
+        <h2 class="text-lg font-serif font-bold text-slate-800">New Patient</h2>
+      </div>
+      <div class="space-y-2 flex-1 relative z-10">
+        <div>
+          <label class="label">Full Name</label>
+          <input id="p-name" type="text" class="input-field" placeholder="e.g. Ion Popescu">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="label">Date of Birth</label>
+            <input id="p-dob" type="date" class="input-field">
+          </div>
+          <div>
+            <label class="label">Sex</label>
+            <select id="p-sex" class="input-field">
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+              <option value="U">Unknown</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button class="btn-coral w-full mt-4 flex items-center justify-center gap-2 relative z-10" onclick="createPatient()">
+        <i class="fa-solid fa-check text-sm"></i> Create Patient
+      </button>
+    </div>
+
+    <!-- DIAGNOSIS -->
+    <div class="bento-card p-6 flex flex-col">
+      <div class="corner-blob w-24 h-24 bg-brand-sage/20"></div>
+      <div class="flex items-center gap-3 mb-4 relative z-10">
+        <div class="w-10 h-10 rounded-xl bg-brand-sage/20 flex items-center justify-center text-brand-teal">
+          <i class="fa-solid fa-clipboard-check"></i>
+        </div>
+        <h2 class="text-lg font-serif font-bold text-slate-800">Diagnosis</h2>
+      </div>
+      <div class="space-y-2 flex-1 relative z-10">
+        <div>
+          <label class="label">Patient</label>
+          <select id="dx-patient" class="input-field teal"><option value="">Select patient…</option></select>
+        </div>
+        <div class="relative">
+          <label class="label">ICD-10 Search</label>
+          <div class="relative">
+            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input id="dx-icd-search" type="text" class="input-field teal pl-9" placeholder="e.g. diabetes, E11" autocomplete="off" oninput="icdSearch()">
+          </div>
+          <div id="dx-icd-dropdown" class="icd-dropdown hidden"></div>
+          <div id="dx-icd-selected" class="hidden mt-1.5 flex items-center gap-1">
+            <span class="badge-icd" id="dx-icd-badge"></span>
+            <button class="text-red-400 hover:text-red-600 text-sm" onclick="clearIcd()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <input type="hidden" id="dx-icd-code">
+        </div>
+      </div>
+      <button class="btn-teal w-full mt-4 relative z-10" onclick="addDiagnosis()">Add Record</button>
+    </div>
+
+    <!-- PRESCRIPTION -->
+    <div class="bento-card p-6 flex flex-col">
+      <div class="corner-blob w-24 h-24 bg-brand-rose/20"></div>
+      <div class="flex items-center gap-3 mb-4 relative z-10">
+        <div class="w-10 h-10 rounded-xl bg-brand-rose/20 flex items-center justify-center text-[#9932CC]">
+          <i class="fa-solid fa-prescription-bottle-medical"></i>
+        </div>
+        <h2 class="text-lg font-serif font-bold text-slate-800">Prescription</h2>
+      </div>
+      <div class="space-y-2 flex-1 relative z-10">
+        <div>
+          <label class="label">Patient</label>
+          <select id="rx-patient" class="input-field purple"><option value="">Select patient…</option></select>
+        </div>
+        <div class="relative">
+          <label class="label">Medication (ATC)</label>
+          <div class="relative">
+            <i class="fa-solid fa-pills absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input id="rx-atc-search" type="text" class="input-field purple pl-9" placeholder="e.g. ibuprofen, M01AE01" autocomplete="off" oninput="atcSearch()">
+          </div>
+          <div id="rx-atc-dropdown" class="icd-dropdown hidden"></div>
+          <div id="rx-atc-selected" class="hidden mt-1 flex items-center gap-1">
+            <span class="badge-icd" style="background:rgba(153,50,204,.1);color:#9932CC;border-color:rgba(153,50,204,.2)" id="rx-atc-badge"></span>
+            <button class="text-red-400 hover:text-red-600 text-sm" onclick="clearAtc()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <input type="hidden" id="rx-atc-code">
+          <input type="hidden" id="rx-med-name">
+        </div>
+        <div>
+          <label class="label">Dose + Unit</label>
+          <div class="flex gap-1">
+            <input id="rx-dose" type="text" class="input-field purple" style="width:55%" placeholder="500">
+            <select id="rx-unit" class="input-field purple" style="width:45%">
+              <option>mg</option><option>ml</option><option>mcg</option><option>units</option><option>tab</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="label">Frequency</label>
+            <select id="rx-freq" class="input-field purple">
+              <option>once daily</option><option>twice daily</option><option>3x daily</option>
+              <option>every 6h</option><option>every 8h</option><option>every 12h</option><option>PRN</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Route</label>
+            <select id="rx-route" class="input-field purple">
+              <option>oral</option><option>IV</option><option>IM</option><option>SC</option><option>topical</option><option>inhaled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button class="btn-purple w-full mt-4 relative z-10" onclick="addPrescription()">Prescribe</button>
+    </div>
+
+    <!-- ADMIT PATIENT -->
+    <div class="bento-card p-6 flex flex-col">
+      <div class="corner-blob w-24 h-24 bg-brand-sage/15"></div>
+      <div class="flex items-center gap-3 mb-4 relative z-10">
+        <div class="w-10 h-10 rounded-xl bg-brand-sage/20 flex items-center justify-center text-brand-teal">
+          <i class="fa-solid fa-hospital"></i>
+        </div>
+        <h2 class="text-lg font-serif font-bold text-slate-800">Admit Patient</h2>
+      </div>
+      <p class="text-xs text-slate-500 mb-3 relative z-10">HL7 ADT^A04 via MLLP &amp; blockchain — atomic.</p>
+      <div class="relative z-10 flex-1">
+        <label class="label">Patient</label>
+        <select id="adm-patient" class="input-field green"><option value="">Select patient…</option></select>
+      </div>
+      <button id="adm-btn" class="btn-sage w-full mt-4 flex items-center justify-center gap-2 relative z-10" onclick="admitPatient()">
+        <i class="fa-solid fa-right-to-bracket"></i> Admit
+      </button>
+      <div id="adm-result" class="admit-result hidden mt-2 relative z-10"></div>
+    </div>
+  </section>
+
+  <!-- ── DATA ZONE ROW 1: Directory + Chain Lens ── -->
+  <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+
+    <!-- PATIENT DIRECTORY (8 cols) -->
+    <div class="lg:col-span-8 flex flex-col">
+      <div class="bento-card flex flex-col h-full">
+        <div class="gradient-bar rounded-t-2xl"></div>
+        <div class="px-7 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 class="text-xl font-serif font-bold text-slate-800 mb-0.5">Patient <span class="scribble-underline">Directory</span></h3>
+            <p class="text-xs text-slate-500 font-medium">Active roster &amp; recent updates · <span id="patient-count" class="font-bold text-brand-coral">0</span> patients</p>
+          </div>
+          <button class="btn-ghost" onclick="loadPatients()"><i class="fa-solid fa-arrows-rotate mr-1.5"></i>Refresh</button>
+        </div>
+        <div class="p-4">
+          <div class="overflow-x-auto overflow-y-auto rounded-xl border border-slate-100" style="max-height:clamp(320px, 52vh, 680px)">
+            <table class="w-full text-left border-collapse">
+              <thead class="sticky top-0 z-10">
+                <tr class="bg-slate-50/95 text-[10px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">
+                  <th class="px-5 py-3">ID</th>
+                  <th class="px-5 py-3">Name</th>
+                  <th class="px-5 py-3">DOB</th>
+                  <th class="px-5 py-3">Sex</th>
+                  <th class="px-5 py-3">Diagnoses</th>
+                  <th class="px-5 py-3">Prescriptions</th>
+                  <th class="px-5 py-3">Created</th>
+                </tr>
+              </thead>
+              <tbody id="patient-tbody" class="text-sm divide-y divide-slate-50">
+                <tr><td colspan="7" class="text-center text-slate-400 py-10">
+                  <i class="fa-solid fa-users text-2xl mb-2 block text-slate-300"></i>No patients yet. Create one above.
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAIN LENS (4 cols) -->
+    <div class="lg:col-span-4 flex flex-col">
+      <div class="chain-card flex flex-col h-full">
+        <div class="chain-glow-coral"></div>
+        <div class="chain-glow-teal"></div>
+
+        <!-- Chain header -->
+        <div class="px-5 py-4 border-b border-white/5 flex items-center justify-between relative z-10 bg-[#1A1A24]/80 backdrop-blur-md">
+          <h3 class="text-base font-serif font-bold text-white flex items-center gap-2.5">
+            <span class="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center border border-white/5">
+              <i class="fa-solid fa-link text-brand-apricot text-xs"></i>
+            </span>
+            Chain Lens
+          </h3>
+          <div class="flex items-center gap-2">
+            <span id="chain-count" class="text-[10px] font-mono text-slate-500">0 events</span>
+            <div class="flex items-center gap-1.5 bg-brand-teal/10 px-2.5 py-0.5 rounded-full border border-brand-teal/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-teal animate-pulse shadow-[0_0_8px_rgba(0,128,128,.8)]"></span>
+              <span class="text-[9px] font-mono text-brand-teal font-bold uppercase tracking-wider">Live</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chain stats row -->
+        <div class="px-5 py-3 border-b border-white/5 flex items-center gap-3 relative z-10">
+          <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Stats:</span>
+          <span id="stat-adm" class="text-xs font-bold" style="color:#FFDAB9">0</span><span class="text-[10px] text-slate-600">adm</span>
+          <span class="text-slate-700">·</span>
+          <span id="stat-dx" class="text-xs font-bold" style="color:#8FBC8F">0</span><span class="text-[10px] text-slate-600">dx</span>
+          <span class="text-slate-700">·</span>
+          <span id="stat-rx" class="text-xs font-bold" style="color:#D8BFD8">0</span><span class="text-[10px] text-slate-600">rx</span>
+        </div>
+
+        <!-- Chain filters + search -->
+        <div class="px-5 py-2.5 border-b border-white/5 flex items-center gap-2 flex-wrap relative z-10">
+          <button class="chain-filter-btn active" data-filter="" onclick="setChainFilter(this,'')">All</button>
+          <button class="chain-filter-btn" data-filter="admission" onclick="setChainFilter(this,'admission')">Admissions</button>
+          <button class="chain-filter-btn" data-filter="diagnosis" onclick="setChainFilter(this,'diagnosis')">Diagnoses</button>
+          <button class="chain-filter-btn" data-filter="prescription" onclick="setChainFilter(this,'prescription')">Prescriptions</button>
+          <input id="chain-search" type="text" class="chain-search ml-auto" placeholder="Search…" oninput="renderChainPage()">
+        </div>
+
+        <!-- Chain events list -->
+        <div id="chain-events" class="flex-1 overflow-y-auto p-4 relative z-10 space-y-2.5" style="max-height:340px">
+          <div class="text-center text-slate-600 py-8 text-sm"><i class="fa-solid fa-link text-xl mb-2 block text-slate-700"></i>No events yet.</div>
+        </div>
+
+        <!-- Chain pagination -->
+        <div id="chain-pagination" class="hidden px-5 py-2.5 border-t border-white/5 flex items-center justify-between relative z-10">
+          <span id="chain-page-info" class="text-[10px] text-slate-500 mono"></span>
+          <div class="flex gap-2">
+            <button id="chain-prev" class="chain-filter-btn" onclick="chainPage(-1)">← Prev</button>
+            <button id="chain-next" class="chain-filter-btn" onclick="chainPage(1)">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── DATA ZONE ROW 2: Timeline + Smart Contract ── -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+    <!-- PATIENT TIMELINE -->
+    <div class="bento-card p-6" style="background:#FDFBF7">
+      <h3 class="text-lg font-serif font-bold text-slate-800 mb-3 flex items-center gap-2">
+        <i class="fa-solid fa-timeline text-brand-teal text-sm"></i> Patient Timeline
+      </h3>
+      <div class="flex gap-2 mb-3">
+        <input id="pt-id-input" type="number" class="input-field teal" style="width:120px" placeholder="Patient ID">
+        <button class="btn-teal text-xs px-3" onclick="loadPatientTimeline()">Load</button>
+      </div>
+      <div id="patient-timeline" class="text-sm text-slate-500">Enter a patient ID to see their on-chain history.</div>
+    </div>
+
+    <!-- CONTRACT AUDIT -->
+    <div class="bento-card p-6 flex flex-col" style="background:#FDFBF7">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-2xl opacity-50 pointer-events-none"></div>
+      <h3 class="text-lg font-serif font-bold text-slate-800 mb-3 relative z-10">Smart Contract</h3>
+      <p class="text-xs text-slate-500 mb-4 relative z-10">Analyse the deployed MedicalAudit smart contract — ABI introspection, gas estimates, and security checks.</p>
+      <div id="audit-body" class="relative z-10"></div>
+      <button id="audit-btn" class="btn-dark w-full mt-4 flex items-center justify-center gap-2 relative z-10" onclick="runAudit()">
+        <i class="fa-solid fa-fingerprint"></i> Run Security Audit
+      </button>
+    </div>
+
+  </section>
+</main>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+const BC  = 'http://127.0.0.1:8001';
+
+let allChainEvents = [];
+let chainFilter = '';
+let chainOffset = 0;
+const chainLimit = 20;
+let icdDebounce;
+let patientCache = [];
+
+// ── HEALTH ─────────────────────────────────────────────────────────────────────
+async function checkHealth() {
+  const dot = (id, ok) => { document.getElementById(id).className = 'health-dot ' + (ok ? 'green' : 'red'); };
+  try { const r = await fetch(`${API}/health`); dot('dot-api', r.ok); } catch { dot('dot-api', false); }
+  try { const r = await fetch(`${BC}/health`);  dot('dot-bc',  r.ok); } catch { dot('dot-bc',  false); }
+  try { const r = await fetch(`${API}/health`); dot('dot-hl7', r.ok); } catch { dot('dot-hl7', false); }
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const c = document.getElementById('toast-container');
+  const id = 'toast-' + Date.now();
+  c.insertAdjacentHTML('beforeend', `
+    <div id="${id}" class="toast-msg toast-${type}">
+      <i class="fa-solid fa-${type==='success'?'circle-check text-brand-teal':'circle-xmark text-red-500'} mt-0.5"></i>
+      <span>${msg}</span>
+      <button class="toast-close" onclick="document.getElementById('${id}').remove()"><i class="fa-solid fa-xmark"></i></button>
+    </div>`);
+  setTimeout(() => document.getElementById(id)?.remove(), 5000);
+}
+
+// ── DROPDOWNS ──────────────────────────────────────────────────────────────────
+function populateDropdowns(patients) {
+  patientCache = patients;
+  ['dx-patient','rx-patient','adm-patient'].forEach(id => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select patient…</option>';
+    patients.forEach(p => {
+      sel.insertAdjacentHTML('beforeend',
+        `<option value="${p.id}" ${p.id==cur?'selected':''}>#${p.id} — ${p.name}</option>`);
+    });
+  });
+}
+
+// ── PATIENTS TABLE ─────────────────────────────────────────────────────────────
+async function loadPatients() {
+  try {
+    const r = await fetch(`${API}/patients/full?limit=100`);
+    const data = await r.json();
+    const rows = data.patients || [];
+    document.getElementById('patient-count').textContent = rows.length;
+    populateDropdowns(rows);
+    const tbody = document.getElementById('patient-tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 py-10"><i class="fa-solid fa-users text-2xl mb-2 block text-slate-300"></i>No patients yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(p => {
+      const dxBadges = p.diagnoses.map(d =>
+        `<span class="badge-icd">${d.icd_code}</span>`).join('') || '<span class="text-slate-400">—</span>';
+      const rxBadges = p.prescriptions.map(rx =>
+        `<span class="badge-med">${rx.medication_name}</span>`).join('') || '<span class="text-slate-400">—</span>';
+      return `<tr class="hover:bg-brand-parchment/50 transition-colors">
+        <td class="px-5 py-3 mono text-slate-400 text-xs">${p.id}</td>
+        <td class="px-5 py-3 font-semibold text-slate-800">${p.name}</td>
+        <td class="px-5 py-3 text-slate-600">${p.dob}</td>
+        <td class="px-5 py-3 text-slate-600">${p.sex}</td>
+        <td class="px-5 py-3">${dxBadges}</td>
+        <td class="px-5 py-3">${rxBadges}</td>
+        <td class="px-5 py-3 text-slate-400 text-xs">${p.created_at.slice(0,16)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error('loadPatients', e); }
+}
+
+// ── CHAIN LENS (client-side) ───────────────────────────────────────────────────
+async function loadChain() {
+  try {
+    const r = await fetch(`${BC}/blockchain/events?limit=500&offset=0`);
+    const data = await r.json();
+    allChainEvents = data.events || [];
+    // Update stats
+    const adm = allChainEvents.filter(e=>e.event_type==='admission').length;
+    const dx  = allChainEvents.filter(e=>e.event_type==='diagnosis').length;
+    const rx  = allChainEvents.filter(e=>e.event_type==='prescription').length;
+    document.getElementById('stat-adm').textContent = adm;
+    document.getElementById('stat-dx').textContent  = dx;
+    document.getElementById('stat-rx').textContent  = rx;
+    document.getElementById('chain-count').textContent = allChainEvents.length + ' events';
+    renderChainPage();
+  } catch(e) { console.error('loadChain', e); }
+}
+
+function setChainFilter(btn, filter) {
+  chainFilter = filter;
+  chainOffset = 0;
+  document.querySelectorAll('.chain-filter-btn').forEach(b => {
+    b.className = 'chain-filter-btn';
+  });
+  const activeClass = filter === 'admission' ? 'active-adm' : filter === 'diagnosis' ? 'active-dx' : filter === 'prescription' ? 'active-rx' : 'active';
+  btn.classList.add(activeClass);
+  renderChainPage();
+}
+
+function getFilteredChain() {
+  let filtered = allChainEvents;
+  if (chainFilter) filtered = filtered.filter(e => e.event_type === chainFilter);
+  const q = (document.getElementById('chain-search').value || '').toLowerCase();
+  if (q) filtered = filtered.filter(e =>
+    String(e.patient_id).includes(q) || (e.detail||'').toLowerCase().includes(q) || (e.tx||'').toLowerCase().includes(q));
+  return filtered;
+}
+
+function renderChainPage() {
+  const filtered = getFilteredChain();
+  const page = filtered.slice(chainOffset, chainOffset + chainLimit);
+  const container = document.getElementById('chain-events');
+
+  if (!page.length) {
+    container.innerHTML = `<div class="text-center text-slate-600 py-8 text-sm"><i class="fa-solid fa-link text-xl mb-2 block text-slate-700"></i>No events found.</div>`;
+    document.getElementById('chain-pagination').classList.add('hidden');
+    return;
+  }
+
+  container.innerHTML = page.map(e => {
+    const badge = {
+      admission:    `<span class="chain-badge-adm"><i class="fa-solid fa-door-open"></i>ADT^A04</span>`,
+      diagnosis:    `<span class="chain-badge-dx"><i class="fa-solid fa-clipboard-check"></i>Diagnosis</span>`,
+      prescription: `<span class="chain-badge-rx"><i class="fa-solid fa-prescription-bottle-medical"></i>RDE^O11</span>`,
+    }[e.event_type] || `<span class="chain-badge-adm">${e.event_type}</span>`;
+    const ts  = new Date(e.timestamp * 1000).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const txShort = e.tx ? `0x${e.tx.slice(2,8)}…${e.tx.slice(-4)}` : '—';
+    return `<div class="chain-event flash-new">
+      <div class="flex justify-between items-start mb-1.5">
+        ${badge}
+        <span class="text-slate-500 text-[11px] mono">${ts}</span>
+      </div>
+      <div class="text-[13px] text-slate-300 font-medium mb-1">${e.detail}</div>
+      <div class="flex justify-between items-center mt-2.5 pt-2.5 border-t border-white/5">
+        <span class="text-slate-500 text-xs mono">Patient #${e.patient_id} · Block ${e.block}</span>
+        <span class="tx-hash" onclick="copyTx('${e.tx}')" title="Click to copy">${txShort}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Pagination
+  const pg = document.getElementById('chain-pagination');
+  if (filtered.length > chainLimit) {
+    pg.classList.remove('hidden');
+    document.getElementById('chain-page-info').textContent =
+      `${chainOffset+1}–${Math.min(chainOffset+chainLimit, filtered.length)} of ${filtered.length}`;
+    document.getElementById('chain-prev').disabled = chainOffset === 0;
+    document.getElementById('chain-next').disabled = chainOffset + chainLimit >= filtered.length;
+  } else { pg.classList.add('hidden'); }
+}
+
+function chainPage(dir) {
+  chainOffset = Math.max(0, chainOffset + dir * chainLimit);
+  renderChainPage();
+}
+
+function copyTx(tx) {
+  if (!tx || tx === '—') return;
+  navigator.clipboard.writeText(tx).then(() => toast('Tx hash copied!')).catch(()=>{});
+}
+
+// ── CREATE PATIENT ─────────────────────────────────────────────────────────────
+async function createPatient() {
+  const name = document.getElementById('p-name').value.trim();
+  const dob  = document.getElementById('p-dob').value;
+  const sex  = document.getElementById('p-sex').value;
+  if (!name || !dob) { toast('Name and date of birth are required.', 'danger'); return; }
+  try {
+    const r = await fetch(`${API}/patients`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, dob, sex})
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(`Error: ${d.error || r.status}`, 'danger'); return; }
+    toast(`Patient #${d.id} <strong>${d.name}</strong> created.`);
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-dob').value = '';
+    loadPatients();
+  } catch(e) { toast('API unreachable.', 'danger'); }
+}
+
+// ── ICD SEARCH ─────────────────────────────────────────────────────────────────
+function icdSearch() {
+  clearTimeout(icdDebounce);
+  const q = document.getElementById('dx-icd-search').value.trim();
+  if (!q) { document.getElementById('dx-icd-dropdown').classList.add('hidden'); return; }
+  icdDebounce = setTimeout(async () => {
+    try {
+      const r = await fetch(`${API}/icd/search?q=${encodeURIComponent(q)}&limit=6`);
+      const d = await r.json();
+      const dd = document.getElementById('dx-icd-dropdown');
+      const results = d.results || [];
+      if (!results.length) { dd.classList.add('hidden'); return; }
+      dd.innerHTML = results.map(x =>
+        `<div class="icd-option" onclick="selectIcd('${x.code}','${x.description.replace(/'/g,"\\'")}')">
+          <strong class="text-brand-coral">${x.code}</strong> — ${x.description}
+        </div>`).join('');
+      dd.classList.remove('hidden');
+    } catch {}
+  }, 300);
+}
+
+function selectIcd(code, desc) {
+  document.getElementById('dx-icd-code').value = code;
+  document.getElementById('dx-icd-badge').textContent = `${code} — ${desc}`;
+  document.getElementById('dx-icd-selected').classList.remove('hidden');
+  document.getElementById('dx-icd-search').value = '';
+  document.getElementById('dx-icd-dropdown').classList.add('hidden');
+}
+
+function clearIcd() {
+  document.getElementById('dx-icd-code').value = '';
+  document.getElementById('dx-icd-selected').classList.add('hidden');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#dx-icd-search') && !e.target.closest('#dx-icd-dropdown'))
+    document.getElementById('dx-icd-dropdown').classList.add('hidden');
+  if (!e.target.closest('#rx-atc-search') && !e.target.closest('#rx-atc-dropdown'))
+    document.getElementById('rx-atc-dropdown').classList.add('hidden');
+});
+
+// ── ATC SEARCH ─────────────────────────────────────────────────────────────────
+let atcDebounce;
+function atcSearch() {
+  clearTimeout(atcDebounce);
+  const q = document.getElementById('rx-atc-search').value.trim();
+  if (!q) { document.getElementById('rx-atc-dropdown').classList.add('hidden'); return; }
+  atcDebounce = setTimeout(async () => {
+    try {
+      const r = await fetch(`${API}/atc/search?q=${encodeURIComponent(q)}&limit=6`);
+      const d = await r.json();
+      const dd = document.getElementById('rx-atc-dropdown');
+      const results = d.results || [];
+      if (!results.length) { dd.classList.add('hidden'); return; }
+      dd.innerHTML = results.map(x =>
+        `<div class="icd-option" onclick="selectAtc('${x.code}','${x.name.replace(/'/g,"\\'")}')">
+          <strong style="color:#9932CC">${x.code}</strong> — ${x.name}${x.ddd ? ` (DDD: ${x.ddd} ${x.uom || ''})` : ''}
+        </div>`).join('');
+      dd.classList.remove('hidden');
+    } catch {}
+  }, 300);
+}
+
+function selectAtc(code, name) {
+  document.getElementById('rx-atc-code').value = code;
+  document.getElementById('rx-med-name').value = name;
+  document.getElementById('rx-atc-badge').textContent = `${code} — ${name}`;
+  document.getElementById('rx-atc-selected').classList.remove('hidden');
+  document.getElementById('rx-atc-search').value = '';
+  document.getElementById('rx-atc-dropdown').classList.add('hidden');
+}
+
+function clearAtc() {
+  document.getElementById('rx-atc-code').value = '';
+  document.getElementById('rx-med-name').value = '';
+  document.getElementById('rx-atc-selected').classList.add('hidden');
+}
+
+// ── ADD DIAGNOSIS ──────────────────────────────────────────────────────────────
+async function addDiagnosis() {
+  const pid  = document.getElementById('dx-patient').value;
+  const code = document.getElementById('dx-icd-code').value;
+  if (!pid)  { toast('Select a patient.', 'danger'); return; }
+  if (!code) { toast('Search and select an ICD-10 code.', 'danger'); return; }
+  try {
+    const r = await fetch(`${API}/patients/${pid}/diagnoses`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({icd_code: code})
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(`Error: ${d.error || r.status}`, 'danger'); return; }
+    const tx = d.blockchain?.tx_hash?.slice(0,10) || '';
+    toast(`Diagnosis <strong>${code}</strong> added. Blockchain: ${tx}…`);
+    clearIcd();
+    loadPatients(); loadChain();
+  } catch(e) { toast('API unreachable.', 'danger'); }
+}
+
+// ── ADD PRESCRIPTION ───────────────────────────────────────────────────────────
+async function addPrescription() {
+  const pid   = document.getElementById('rx-patient').value;
+  const atc   = document.getElementById('rx-atc-code').value;
+  const med   = document.getElementById('rx-med-name').value.trim();
+  const dose  = document.getElementById('rx-dose').value.trim();
+  const unit  = document.getElementById('rx-unit').value;
+  const freq  = document.getElementById('rx-freq').value;
+  const route = document.getElementById('rx-route').value;
+  if (!pid)  { toast('Select a patient.', 'danger'); return; }
+  if (!med || !atc) { toast('Select a medication from the ATC search.', 'danger'); return; }
+  if (!dose) { toast('Enter a dose.', 'danger'); return; }
+  try {
+    const r = await fetch(`${API}/patients/${pid}/prescriptions`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({medication_name:med, atc_code:atc, dose, unit, frequency:freq, route})
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(`Error: ${d.error || r.status}`, 'danger'); return; }
+    const tx = d.blockchain?.tx_hash?.slice(0,10) || '';
+    toast(`Prescription <strong>${atc} ${med} ${dose}${unit}</strong> created. Blockchain: ${tx}…`);
+    clearAtc();
+    document.getElementById('rx-dose').value = '';
+    loadPatients(); loadChain();
+  } catch(e) { toast('API unreachable.', 'danger'); }
+}
+
+// ── ADMIT PATIENT ──────────────────────────────────────────────────────────────
+async function admitPatient() {
+  const pid = document.getElementById('adm-patient').value;
+  if (!pid) { toast('Select a patient.', 'danger'); return; }
+  const btn = document.getElementById('adm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Admitting…';
+  try {
+    const r = await fetch(`${API}/admissions`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({patient_id: parseInt(pid)})
+    });
+    const d = await r.json();
+    const res = document.getElementById('adm-result');
+    if (!r.ok) {
+      res.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-red-700 text-xs">${d.error || 'Error'}</div>`;
+      res.classList.remove('hidden');
+      toast(`Admission failed: ${d.error}`, 'danger');
+    } else {
+      const hl7ok = d.hl7?.status === 'ack';
+      const bcOk  = !!d.blockchain?.tx_hash;
+      const tx    = d.blockchain?.tx_hash?.slice(0,10) || '—';
+      res.innerHTML = `
+        <div class="bg-brand-parchment border border-slate-200 rounded-xl px-4 py-3 space-y-1.5">
+          <div class="flex items-center gap-2 text-xs ${hl7ok?'text-brand-teal':'text-red-500'}">
+            <i class="fa-solid fa-${hl7ok?'circle-check':'circle-xmark'}"></i> MLLP: ${hl7ok?'ACK ✓':'NACK ✗'}
+          </div>
+          <div class="flex items-center gap-2 text-xs ${bcOk?'text-brand-teal':'text-red-500'}">
+            <i class="fa-solid fa-${bcOk?'circle-check':'circle-xmark'}"></i> Tx: <span class="mono">${tx}…</span> (Block #${d.blockchain?.block_number??'—'})
+          </div>
+          <div class="text-slate-500 text-[11px]">Message #${d.message_id}</div>
+        </div>`;
+      res.classList.remove('hidden');
+      toast(`Patient #${pid} admitted. HL7 ${hl7ok?'ACK':'NACK'}, Block #${d.blockchain?.block_number??'—'}.`);
+      loadPatients(); loadChain();
+    }
+  } catch(e) { toast('API unreachable.', 'danger'); }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Admit';
+}
+
+// ── PATIENT TIMELINE ───────────────────────────────────────────────────────────
+async function loadPatientTimeline() {
+  const pid = document.getElementById('pt-id-input').value;
+  if (!pid) return;
+  const el = document.getElementById('patient-timeline');
+  el.innerHTML = '<div class="text-slate-500 text-xs">Loading…</div>';
+  try {
+    const r = await fetch(`${BC}/blockchain/events/${pid}`);
+    const d = await r.json();
+    if (!r.ok) { el.innerHTML = `<div class="text-red-500 text-xs">${d.error||'Error'}</div>`; return; }
+    const all = [
+      ...(d.admissions||[]).map(e=>({...e,type:'admission'})),
+      ...(d.diagnoses||[]).map(e=>({...e,type:'diagnosis'})),
+      ...(d.prescriptions||[]).map(e=>({...e,type:'prescription'})),
+    ].sort((a,b)=>a.timestamp-b.timestamp);
+    if (!all.length) { el.innerHTML = '<div class="text-slate-400 text-xs">No on-chain events for this patient.</div>'; return; }
+
+    const icons = {admission:'fa-door-open',diagnosis:'fa-clipboard-check',prescription:'fa-prescription-bottle-medical'};
+    const dotCls= {admission:'timeline-dot-adm',diagnosis:'timeline-dot-dx',prescription:'timeline-dot-rx'};
+
+    el.innerHTML = all.map(e=>`
+      <div class="flex gap-3 items-start mb-3">
+        <div class="timeline-dot ${dotCls[e.type]}">
+          <i class="fa-solid ${icons[e.type]} text-xs"></i>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-slate-800">${e.type.charAt(0).toUpperCase()+e.type.slice(1)}</div>
+          <div class="text-[11px] text-slate-500">${e.detail||''}</div>
+          <div class="mono text-[10px] text-slate-400">Block ${e.block} · ${new Date(e.timestamp*1000).toLocaleString('ro-RO')}</div>
+        </div>
+      </div>`).join('');
+  } catch { el.innerHTML = '<div class="text-red-500 text-xs">API unreachable.</div>'; }
+}
+
+// ── CONTRACT AUDIT ─────────────────────────────────────────────────────────────
+async function runAudit() {
+  const btn = document.getElementById('audit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Auditing…';
+  try {
+    const r = await fetch(`${BC}/blockchain/contract/audit`);
+    const d = await r.json();
+    const body = document.getElementById('audit-body');
+    if (!r.ok) { body.innerHTML = `<div class="text-red-500 text-xs">${d.error||'Audit failed'}</div>`; return; }
+    const c = d.contract;
+    const score = d.security;
+
+    const checks = score.checks.map(ch => `
+      <div class="flex items-center gap-2 text-xs py-1">
+        <i class="fa-solid fa-${ch.passed?'circle-check audit-pass':'circle-xmark audit-fail'}"></i>
+        <span class="font-semibold text-slate-700">${ch.check}</span>
+        <span class="text-slate-500 ml-auto text-[10px]">${ch.detail}</span>
+      </div>`).join('');
+
+    const fns = d.functions.map(f => `
+      <div class="text-xs py-1 border-b border-slate-100 last:border-0">
+        <span class="mono font-bold text-slate-700">${f.name}</span>
+        <span class="text-slate-400 ml-1">(${f.inputs.map(i=>i.type).join(', ')})</span>
+        <span class="ml-2 text-[10px] text-slate-500">${f.state_mutability}</span>
+        ${f.gas_estimate ? `<span class="ml-2 mono text-[10px] text-brand-teal">${f.gas_estimate.toLocaleString()} gas</span>` : ''}
+      </div>`).join('');
+
+    body.innerHTML = `
+      <div class="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/50 shadow-sm space-y-3 mb-4">
+        <div class="flex justify-between text-xs border-b border-slate-100 pb-2">
+          <span class="text-slate-500">Address</span>
+          <span class="mono text-slate-700 text-[11px]">${c.address.slice(0,10)}…${c.address.slice(-6)}</span>
+        </div>
+        <div class="flex justify-between text-xs border-b border-slate-100 pb-2">
+          <span class="text-slate-500">Chain</span>
+          <span class="mono text-slate-700">${c.chain_id} (Hardhat)</span>
+        </div>
+        <div class="flex justify-between text-xs border-b border-slate-100 pb-2">
+          <span class="text-slate-500">Block</span>
+          <span class="mono text-slate-700">${c.current_block}</span>
+        </div>
+        <div class="flex justify-between text-xs border-b border-slate-100 pb-2">
+          <span class="text-slate-500">Bytecode</span>
+          <span class="text-slate-700">${c.bytecode_size_bytes?.toLocaleString()} bytes</span>
+        </div>
+        <div class="flex justify-between text-xs">
+          <span class="text-slate-500">Security Score</span>
+          <span class="font-bold ${score.passed===score.total?'text-brand-teal':'text-brand-coral'}">${score.score}</span>
+        </div>
+      </div>
+      <div class="mb-3">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Functions</div>
+        ${fns}
+      </div>
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Security Checks</div>
+        ${checks}
+      </div>`;
+  } catch(e) { document.getElementById('audit-body').innerHTML = '<div class="text-red-500 text-xs">Blockchain API unreachable.</div>'; }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-fingerprint"></i> Run Security Audit';
+}
+
+// ── INIT & POLLING ─────────────────────────────────────────────────────────────
+checkHealth();
+loadPatients();
+loadChain();
+setInterval(checkHealth, 10000);
+setInterval(() => { loadPatients(); loadChain(); }, 5000);
+</script>
+</body>
+</html>
