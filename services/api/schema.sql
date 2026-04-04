@@ -35,6 +35,23 @@ CREATE TABLE IF NOT EXISTS diagnoses (
 CREATE INDEX IF NOT EXISTS idx_diagnoses_patient ON diagnoses(patient_id);
 CREATE INDEX IF NOT EXISTS idx_diagnoses_icd ON diagnoses(icd_code);
 
+CREATE TABLE IF NOT EXISTS prescriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    medication_name TEXT NOT NULL,
+    dose TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    route TEXT NOT NULL DEFAULT 'oral',
+    prescriber TEXT NOT NULL DEFAULT 'Dr. MCP',
+    icd_code TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (patient_id) REFERENCES patients(id),
+    FOREIGN KEY (icd_code) REFERENCES icd_codes(code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id);
+
 CREATE TABLE IF NOT EXISTS hl7_messages(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,

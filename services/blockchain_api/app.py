@@ -69,6 +69,38 @@ def record_diagnosis():
     ), 201
 
 
+@app.post("/blockchain/record_prescription")
+def record_prescription():
+    body = request.get_json(force=True) or {}
+    patient_id = body.get("patient_id")
+    medication = (body.get("medication") or "").strip()
+    icd_code = (body.get("icd_code") or "").strip()
+
+    if not isinstance(patient_id, int) or not medication:
+        return jsonify(error="missing_patient_id_or_medication"), 400
+
+    try:
+        w3, contract = get_contract()
+    except ConnectionError as e:
+        return jsonify(error="node_unreachable", detail=str(e)), 503
+
+    account = w3.eth.accounts[0]
+    tx_hash = contract.functions.recordPrescription(patient_id, medication, icd_code).transact(
+        {"from": account}
+    )
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    return jsonify(
+        ok=True,
+        patient_id=patient_id,
+        medication=medication,
+        icd_code=icd_code,
+        tx_hash=tx_hash.hex(),
+        block_number=receipt["blockNumber"],
+        gas_used=receipt["gasUsed"],
+    ), 201
+
+
 @app.get("/blockchain/events")
 def get_all_events():
     try:
@@ -86,6 +118,7 @@ def get_all_events():
 
     all_admissions = contract.events.AdmissionRecorded.get_logs(from_block=0, to_block="latest")
     all_diagnoses = contract.events.DiagnosisRecorded.get_logs(from_block=0, to_block="latest")
+    all_prescriptions = contract.events.PrescriptionRecorded.get_logs(from_block=0, to_block="latest")
 
     events = []
     for e in all_admissions:
@@ -102,6 +135,15 @@ def get_all_events():
             "event_type": "diagnosis",
             "patient_id": e["args"]["patientId"],
             "detail": e["args"]["icdCode"],
+            "timestamp": e["args"]["timestamp"],
+            "block": e["blockNumber"],
+            "tx": e["transactionHash"].hex(),
+        })
+    for e in all_prescriptions:
+        events.append({
+            "event_type": "prescription",
+            "patient_id": e["args"]["patientId"],
+            "detail": f"{e['args']['medication']}" + (f" ({e['args']['icdCode']})" if e["args"]["icdCode"] else ""),
             "timestamp": e["args"]["timestamp"],
             "block": e["blockNumber"],
             "tx": e["transactionHash"].hex(),
@@ -129,9 +171,11 @@ def get_events(patient_id: int):
 
     all_admissions = contract.events.AdmissionRecorded.get_logs(from_block=0, to_block="latest")
     all_diagnoses = contract.events.DiagnosisRecorded.get_logs(from_block=0, to_block="latest")
+    all_prescriptions = contract.events.PrescriptionRecorded.get_logs(from_block=0, to_block="latest")
 
     admissions = [e for e in all_admissions if e["args"]["patientId"] == patient_id]
     diagnoses = [e for e in all_diagnoses if e["args"]["patientId"] == patient_id]
+    prescriptions = [e for e in all_prescriptions if e["args"]["patientId"] == patient_id]
 
     return jsonify(
         ok=True,
@@ -153,5 +197,15 @@ def get_events(patient_id: int):
                 "tx": e["transactionHash"].hex(),
             }
             for e in diagnoses
+        ],
+        prescriptions=[
+            {
+                "medication": e["args"]["medication"],
+                "icdCode": e["args"]["icdCode"],
+                "timestamp": e["args"]["timestamp"],
+                "block": e["blockNumber"],
+                "tx": e["transactionHash"].hex(),
+            }
+            for e in prescriptions
         ],
     )

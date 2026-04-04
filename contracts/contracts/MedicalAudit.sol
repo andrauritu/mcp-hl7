@@ -15,11 +15,22 @@ contract MedicalAudit {
         uint256 timestamp
     );
 
+    event PrescriptionRecorded(
+        uint256 indexed patientId,
+        string medication,
+        string icdCode,
+        uint256 timestamp
+    );
+
     function recordAdmission(uint256 patientId, string calldata messageType) external {
         emit AdmissionRecorded (patientId, messageType, block.timestamp);
     }
 
     function recordDiagnosis (uint256 patientId, string calldata icdCode) external {
         emit DiagnosisRecorded(patientId, icdCode, block.timestamp);
+    }
+
+    function recordPrescription(uint256 patientId, string calldata medication, string calldata icdCode) external {
+        emit PrescriptionRecorded(patientId, medication, icdCode, block.timestamp);
     }
 }

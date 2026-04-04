@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, jsonify, request
 
 from db import init_db, get_db
-from hl7_builder import build_adt_a04
+from hl7_builder import build_adt_a04, build_rde_o11
 from mllp_client import send as mllp_send, is_ack
 
 BLOCKCHAIN_API_URL = os.environ.get("BLOCKCHAIN_API_URL", "http://127.0.0.1:8001")
@@ -522,4 +522,140 @@ def hl7_send():
         status = status,
         ack_text = ack_text
     )
+
+
+@app.post("/patients/<int:patient_id>/prescriptions")
+def create_prescription(patient_id: int):
+    """Create a prescription, build HL7 RDE^O11, send via MLLP, and record on blockchain."""
+    body = request.get_json(force=True) or {}
+
+    medication_name = (body.get("medication_name") or "").strip()
+    dose = (body.get("dose") or "").strip()
+    unit = (body.get("unit") or "").strip()
+    frequency = (body.get("frequency") or "").strip()
+    route = (body.get("route") or "oral").strip()
+    prescriber = (body.get("prescriber") or "Dr. MCP").strip()
+    icd_code = (body.get("icd_code") or "").strip().upper() or None
+
+    if not medication_name or not dose or not unit or not frequency:
+        return jsonify(
+            error="invalid_input",
+            expected={"medication_name": "string", "dose": "string", "unit": "string", "frequency": "string"},
+        ), 400
+
+    with get_db() as conn:
+        patient = conn.execute(
+            "SELECT id, name, dob, sex FROM patients WHERE id = ?",
+            (patient_id,),
+        ).fetchone()
+        if patient is None:
+            return jsonify(error="patient_not_found", patient_id=patient_id), 404
+
+    icd_description = None
+    if icd_code:
+        with get_db() as conn:
+            icd_row = conn.execute(
+                "SELECT code, description FROM icd_codes WHERE code = ?",
+                (icd_code,),
+            ).fetchone()
+            if icd_row:
+                icd_description = icd_row["description"]
+
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO prescriptions
+               (patient_id, medication_name, dose, unit, frequency, route, prescriber, icd_code)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (patient_id, medication_name, dose, unit, frequency, route, prescriber, icd_code),
+        )
+        conn.commit()
+        rx_id = cur.lastrowid
+
+    hl7_text = build_rde_o11(
+        patient_id=patient["id"],
+        patient_name=patient["name"],
+        dob=patient["dob"],
+        sex=patient["sex"],
+        medication_name=medication_name,
+        dose=dose,
+        unit=unit,
+        frequency=frequency,
+        route=route,
+        prescriber=prescriber,
+        icd_code=icd_code,
+        icd_description=icd_description,
+    )
+
+    with get_db() as conn:
+        cur2 = conn.execute(
+            "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
+            (patient_id, "RDE^O11", hl7_text, "built"),
+        )
+        conn.commit()
+        message_id = cur2.lastrowid
+
+    def _send_hl7():
+        try:
+            ack_text = mllp_send(hl7_text)
+            status = "ack" if is_ack(ack_text) else "nack"
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
+                    (status, ack_text, message_id),
+                )
+                conn.commit()
+            return {"ok": True, "status": status, "ack_text": ack_text}
+        except ConnectionError as e:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ? WHERE id = ?",
+                    ("failed", message_id),
+                )
+                conn.commit()
+            return {"ok": False, "error": "receiver_unreachable", "detail": str(e)}
+
+    def _record_blockchain():
+        try:
+            r = requests.post(
+                f"{BLOCKCHAIN_API_URL}/blockchain/record_prescription",
+                json={
+                    "patient_id": patient_id,
+                    "medication": medication_name,
+                    "icd_code": icd_code or "",
+                },
+                timeout=15.0,
+            )
+            return r.json()
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        hl7_future = executor.submit(_send_hl7)
+        blockchain_future = executor.submit(_record_blockchain)
+        hl7_result = hl7_future.result()
+        blockchain_result = blockchain_future.result()
+
+    return jsonify(
+        ok=True,
+        prescription_id=rx_id,
+        message_id=message_id,
+        patient_id=patient_id,
+        medication=medication_name,
+        hl7=hl7_result,
+        blockchain=blockchain_result,
+    ), 201
+
+
+@app.get("/patients/<int:patient_id>/prescriptions")
+def list_prescriptions(patient_id: int):
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, patient_id, medication_name, dose, unit, frequency,
+                      route, prescriber, icd_code, created_at
+               FROM prescriptions
+               WHERE patient_id = ?
+               ORDER BY created_at DESC""",
+            (patient_id,),
+        ).fetchall()
+    return jsonify(patient_id=patient_id, prescriptions=[dict(r) for r in rows])
 

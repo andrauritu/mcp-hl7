@@ -172,6 +172,43 @@ def record_admission(patient_id: int) -> dict:
 
 
 @mcp.tool()
+def patient_add_prescription(
+    patient_id: int,
+    medication_name: str,
+    dose: str,
+    unit: str,
+    frequency: str,
+    route: str = "oral",
+    prescriber: str = "Dr. MCP",
+    icd_code: str = "",
+) -> dict:
+    """Create a prescription for a patient: builds HL7 RDE^O11, sends via MLLP,
+    and records on blockchain — all in one call.
+    Example: patient_add_prescription(1, "Metformin", "500", "mg", "twice daily", "oral")"""
+    _count("patient_add_prescription")
+    r = httpx.post(
+        f"{API_BASE}/patients/{patient_id}/prescriptions",
+        json={
+            "medication_name": medication_name,
+            "dose": dose,
+            "unit": unit,
+            "frequency": frequency,
+            "route": route,
+            "prescriber": prescriber,
+            "icd_code": icd_code or None,
+        },
+        timeout=30.0,
+    )
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    return {"ok": True, **data}
+
+
+@mcp.tool()
 def get_usage_stats() -> dict:
     """Return how many times each MCP tool has been called in this session."""
     _count("get_usage_stats")
