@@ -172,6 +172,25 @@ def record_admission(patient_id: int) -> dict:
 
 
 @mcp.tool()
+def patient_discharge(patient_id: int) -> dict:
+    """Discharge a patient: sets discharged_at, builds HL7 ADT^A03, sends via MLLP,
+    and records the discharge on the blockchain audit log — all in one call."""
+    _count("patient_discharge")
+    r = httpx.post(
+        f"{API_BASE}/patients/{patient_id}/discharge",
+        json={},
+        timeout=30.0,
+    )
+    try:
+        data = r.json()
+    except Exception:
+        data = {"error": "bad_response", "status_code": r.status_code}
+    if r.status_code >= 400:
+        return {"ok": False, "status_code": r.status_code, "error": data}
+    return {"ok": True, **data}
+
+
+@mcp.tool()
 def patient_add_prescription(
     patient_id: int,
     medication_name: str,
@@ -180,16 +199,18 @@ def patient_add_prescription(
     frequency: str,
     route: str = "oral",
     prescriber: str = "Dr. MCP",
+    atc_code: str = "",
     icd_code: str = "",
 ) -> dict:
     """Create a prescription for a patient: builds HL7 RDE^O11, sends via MLLP,
     and records on blockchain — all in one call.
-    Example: patient_add_prescription(1, "Metformin", "500", "mg", "twice daily", "oral")"""
+    Example: patient_add_prescription(1, "ibuprofen", "400", "mg", "twice daily", "oral", atc_code="M01AE01")"""
     _count("patient_add_prescription")
     r = httpx.post(
         f"{API_BASE}/patients/{patient_id}/prescriptions",
         json={
             "medication_name": medication_name,
+            "atc_code": atc_code or None,
             "dose": dose,
             "unit": unit,
             "frequency": frequency,

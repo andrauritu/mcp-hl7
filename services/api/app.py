@@ -2,10 +2,10 @@ import os
 import re
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, jsonify, request, render_template, make_response
+from flask import Flask, jsonify, request, render_template, make_response, redirect, url_for
 
 from db import init_db, get_db
-from hl7_builder import build_adt_a04, build_rde_o11
+from hl7_builder import build_adt_a03, build_adt_a04, build_rde_o11
 from mllp_client import send as mllp_send, is_ack
 
 BLOCKCHAIN_API_URL = os.environ.get("BLOCKCHAIN_API_URL", "http://127.0.0.1:8001")
@@ -20,6 +20,11 @@ def add_cors(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+
+@app.route("/")
+def index():
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/dashboard")
@@ -38,7 +43,7 @@ def list_patients_full():
 
     with get_db() as conn:
         patients = [dict(r) for r in conn.execute(
-            "SELECT id, name, dob, sex, created_at FROM patients ORDER BY created_at DESC LIMIT ?",
+            "SELECT id, name, dob, sex, created_at, discharged_at FROM patients ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()]
 
@@ -85,7 +90,7 @@ def create_patient():
         patient_id = cur.lastrowid
 
         row = conn.execute(
-            "SELECT id, name, dob, sex, created_at FROM patients WHERE id = ?",
+            "SELECT id, name, dob, sex, created_at, discharged_at FROM patients WHERE id = ?",
             (patient_id,),
         ).fetchone()
 
@@ -102,7 +107,7 @@ def list_patients():
 
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, name, dob, sex, created_at FROM patients ORDER BY created_at DESC LIMIT ?",
+            "SELECT id, name, dob, sex, created_at, discharged_at FROM patients ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
 
@@ -114,7 +119,7 @@ def list_patients():
 def get_patient(patient_id: int):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, name, dob, sex, created_at FROM patients WHERE id = ?",
+            "SELECT id, name, dob, sex, created_at, discharged_at FROM patients WHERE id = ?",
             (patient_id,),
         ).fetchone()
 
@@ -787,4 +792,93 @@ def list_prescriptions(patient_id: int):
             (patient_id,),
         ).fetchall()
     return jsonify(patient_id=patient_id, prescriptions=[dict(r) for r in rows])
+
+
+@app.post("/patients/<int:patient_id>/discharge")
+def discharge_patient(patient_id: int):
+    """Set discharged_at, build HL7 ADT^A03, send via MLLP, and record on blockchain."""
+    with get_db() as conn:
+        patient = conn.execute(
+            "SELECT id, name, dob, sex, discharged_at FROM patients WHERE id = ?",
+            (patient_id,),
+        ).fetchone()
+
+        if patient is None:
+            return jsonify(error="patient_not_found", patient_id=patient_id), 404
+
+        if patient["discharged_at"] is not None:
+            return jsonify(error="already_discharged", discharged_at=patient["discharged_at"]), 409
+
+        conn.execute(
+            "UPDATE patients SET discharged_at = datetime('now') WHERE id = ?",
+            (patient_id,),
+        )
+        conn.commit()
+
+        updated = conn.execute(
+            "SELECT id, name, dob, sex, created_at, discharged_at FROM patients WHERE id = ?",
+            (patient_id,),
+        ).fetchone()
+
+    patient_dict = dict(updated)
+
+    hl7_text = build_adt_a03(
+        patient_id=patient["id"],
+        patient_name=patient["name"],
+        dob=patient["dob"],
+        sex=patient["sex"],
+    )
+
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO hl7_messages (patient_id, message_type, hl7_text, status) VALUES (?, ?, ?, ?)",
+            (patient_id, "ADT^A03", hl7_text, "built"),
+        )
+        conn.commit()
+        message_id = cur.lastrowid
+
+    def _send_hl7():
+        try:
+            ack_text = mllp_send(hl7_text)
+            status = "ack" if is_ack(ack_text) else "nack"
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ?, ack_text = ? WHERE id = ?",
+                    (status, ack_text, message_id),
+                )
+                conn.commit()
+            return {"ok": True, "status": status, "ack_text": ack_text}
+        except ConnectionError as e:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE hl7_messages SET status = ? WHERE id = ?",
+                    ("failed", message_id),
+                )
+                conn.commit()
+            return {"ok": False, "error": "receiver_unreachable", "detail": str(e)}
+
+    def _record_blockchain():
+        try:
+            r = requests.post(
+                f"{BLOCKCHAIN_API_URL}/blockchain/record_discharge",
+                json={"patient_id": patient_id, "message_type": "ADT^A03"},
+                timeout=15.0,
+            )
+            return r.json()
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        hl7_future = executor.submit(_send_hl7)
+        blockchain_future = executor.submit(_record_blockchain)
+        hl7_result = hl7_future.result()
+        blockchain_result = blockchain_future.result()
+
+    return jsonify(
+        ok=True,
+        patient=patient_dict,
+        message_id=message_id,
+        hl7=hl7_result,
+        blockchain=blockchain_result,
+    ), 200
 

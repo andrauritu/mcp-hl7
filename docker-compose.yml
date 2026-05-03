@@ -1,0 +1,67 @@
+services:
+
+  # ── Local Ethereum node (Hardhat) ──
+  hardhat:
+    build: ./contracts
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8545',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',id:1})}).then(r=>r.json()).then(d=>{if(d.result)process.exit(0);process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - contracts-data:/app
+
+  # ── One-shot: deploy the smart contract ──
+  deploy-contract:
+    build: ./contracts
+    depends_on:
+      hardhat:
+        condition: service_healthy
+    environment:
+      HARDHAT_URL: http://hardhat:8545
+    entrypoint: ["npx", "hardhat", "run", "scripts/deploy.js", "--network", "localhost"]
+    volumes:
+      - contracts-data:/app
+
+  # ── Blockchain API (Flask :8001) ──
+  blockchain-api:
+    build: ./services/blockchain_api
+    ports:
+      - "8001:8001"
+    environment:
+      FLASK_APP: app.py
+      HARDHAT_URL: http://hardhat:8545
+      CONTRACTS_DIR: /contracts
+    depends_on:
+      deploy-contract:
+        condition: service_completed_successfully
+    volumes:
+      - contracts-data:/contracts:ro
+
+  # ── HL7 MLLP Receiver (:2575) ──
+  hl7-receiver:
+    build: ./services/hl7_receiver
+    ports:
+      - "2575:2575"
+    environment:
+      HL7_HOST: "0.0.0.0"
+      HL7_PORT: "2575"
+
+  # ── Main API + Dashboard (Flask :8000) ──
+  api:
+    build: ./services/api
+    ports:
+      - "8000:8000"
+    environment:
+      FLASK_APP: app.py
+      BLOCKCHAIN_API_URL: http://blockchain-api:8001
+      HL7_RECEIVER_HOST: hl7-receiver
+      HL7_RECEIVER_PORT: "2575"
+    depends_on:
+      - blockchain-api
+      - hl7-receiver
+
+volumes:
+  contracts-data:

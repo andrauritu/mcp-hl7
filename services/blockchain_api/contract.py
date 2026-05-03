@@ -1,14 +1,16 @@
 import json
+import os
 from pathlib import Path
 from web3 import Web3
 
-NODE_URL = "http://127.0.0.1:8545"
+NODE_URL = os.environ.get("HARDHAT_URL", "http://127.0.0.1:8545")
 
-_DEPLOYED_JSON = (
-    Path(__file__).parent.parent.parent
-    / "contracts"
-    / "deployed.json"
+_CONTRACTS_DIR = Path(
+    os.environ.get("CONTRACTS_DIR",
+                    str(Path(__file__).parent.parent.parent / "contracts"))
 )
+
+_DEPLOYED_JSON = _CONTRACTS_DIR / "deployed.json"
 
 def _get_contract_address() -> str:
     if _DEPLOYED_JSON.exists():
@@ -19,8 +21,7 @@ def _get_contract_address() -> str:
     )
 
 ABI_PATH = (
-    Path(__file__).parent.parent.parent
-    / "contracts"
+    _CONTRACTS_DIR
     / "artifacts"
     / "contracts"
     / "MedicalAudit.sol"

@@ -184,4 +184,51 @@ def build_rde_o11(
         segments.append(dg1)
 
     return _SEGMENT_SEP.join(segments)
-        
+
+
+def build_adt_a03(
+    patient_id: str,
+    patient_name: str,
+    dob: str,
+    sex: str,
+    message_control_id: str | None = None,
+) -> str:
+    """Build an HL7 v2.5 ADT^A03 (Discharge Patient) message."""
+    now = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+    if message_control_id is None:
+        message_control_id = f"{patient_id}-DC-{now}"
+
+    segments = []
+
+    msh = _FIELD_SEP.join([
+        "MSH",
+        _ENCODING_CHARS,
+        "MCPHL7",
+        "DEMO",
+        "EHR",
+        "DEMO",
+        now,
+        "",
+        "ADT^A03",
+        message_control_id,
+        "P",
+        "2.5",
+    ])
+    segments.append(msh)
+
+    pid = _FIELD_SEP.join([
+        "PID",
+        "1",
+        "",
+        str(patient_id),
+        "",
+        patient_name,
+        "",
+        _format_dob(dob),
+        sex,
+    ])
+    segments.append(pid)
+
+    return _SEGMENT_SEP.join(segments)
+

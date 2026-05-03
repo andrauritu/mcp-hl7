@@ -1,10 +1,11 @@
+import os
 import socket
 
 MLLP_START = b"\x0b"
 MLLP_END = b"\x1c\x0d"
 
-RECEIVER_HOST = "127.0.0.1"
-RECEIVER_PORT = 2575
+RECEIVER_HOST = os.environ.get("HL7_RECEIVER_HOST", "127.0.0.1")
+RECEIVER_PORT = int(os.environ.get("HL7_RECEIVER_PORT", "2575"))
 
 def send(hl7_text: str, host: str = RECEIVER_HOST, port: int = RECEIVER_PORT) -> str:
     payload = MLLP_START + hl7_text.encode("utf-8") + MLLP_END

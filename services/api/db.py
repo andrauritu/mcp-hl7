@@ -31,3 +31,7 @@ def init_db() -> None:
     schema_sql = schema_path.read_text(encoding="utf-8")
     with get_db() as conn:
         conn.executescript(schema_sql)
+        # Migration: add discharged_at if missing (existing DBs)
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(patients)").fetchall()]
+        if "discharged_at" not in cols:
+            conn.execute("ALTER TABLE patients ADD COLUMN discharged_at TEXT")

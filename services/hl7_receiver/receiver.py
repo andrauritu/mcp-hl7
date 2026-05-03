@@ -1,8 +1,9 @@
+import os
 import socket
 import logging
 
-HOST = "127.0.0.1"
-PORT = 2575
+HOST = os.environ.get("HL7_HOST", "0.0.0.0")
+PORT = int(os.environ.get("HL7_PORT", "2575"))
 
 MLLP_START = b"\x0b"
 MLLP_END = b"\x1c\x0d"  

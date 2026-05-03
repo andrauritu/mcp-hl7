@@ -83,6 +83,7 @@ def blockchain_verify_patient(patient_id: int) -> dict:
     chain_diagnoses = chain_data.get("diagnoses", [])
     chain_admissions = chain_data.get("admissions", [])
     chain_prescriptions = chain_data.get("prescriptions", [])
+    chain_discharges = chain_data.get("discharges", [])
 
     # Verify diagnoses
     db_dx_counts = Counter(d["icd_code"] for d in db_diagnoses)
@@ -158,6 +159,7 @@ def blockchain_verify_patient(patient_id: int) -> dict:
             "blockchain_diagnoses": len(chain_diagnoses),
             "blockchain_admissions": len(chain_admissions),
             "blockchain_prescriptions": len(chain_prescriptions),
+            "blockchain_discharges": len(chain_discharges),
             "diagnoses_matched": matched,
             "prescriptions_matched": rx_matched,
             "missing_from_blockchain": sum(1 for d in discrepancies if d["type"] == "missing_from_blockchain"),
@@ -202,6 +204,15 @@ def blockchain_audit_summary(patient_id: int) -> dict:
             "timestamp_unix": e["timestamp"],
             "event_type": "prescription",
             "detail": f"{e['medication']}" + (f" ({e['icdCode']})" if e.get("icdCode") else ""),
+            "block": e["block"],
+            "tx_hash": e["tx"],
+        })
+
+    for e in data.get("discharges", []):
+        events.append({
+            "timestamp_unix": e["timestamp"],
+            "event_type": "discharge",
+            "detail": e["messageType"],
             "block": e["block"],
             "tx_hash": e["tx"],
         })
