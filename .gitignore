@@ -19,5 +19,8 @@ Thumbs.db
 .env
 .env.*
 
+# TLS certificates (generated locally, not committed)
+*.pem
+
 services/api/data/
 services/api/data/icd.csv

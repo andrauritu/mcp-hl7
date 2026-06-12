@@ -48,6 +48,8 @@ services:
     environment:
       HL7_HOST: "0.0.0.0"
       HL7_PORT: "2575"
+      HL7_TLS_CERT: "cert.pem"
+      HL7_TLS_KEY: "key.pem"
 
   # ── Main API + Dashboard (Flask :8000) ──
   api:
@@ -59,6 +61,7 @@ services:
       BLOCKCHAIN_API_URL: http://blockchain-api:8001
       HL7_RECEIVER_HOST: hl7-receiver
       HL7_RECEIVER_PORT: "2575"
+      HL7_TLS_CA: /app/hl7_receiver_cert.pem
     depends_on:
       - blockchain-api
       - hl7-receiver

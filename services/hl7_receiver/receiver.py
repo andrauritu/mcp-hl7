@@ -1,5 +1,6 @@
 import os
 import socket
+import ssl
 import logging
 
 HOST = os.environ.get("HL7_HOST", "0.0.0.0")
@@ -77,6 +78,13 @@ def handle_connection (conn: socket.socket, addr: tuple) -> None:
 
 
 def main():
+    tls_cert = os.environ.get("HL7_TLS_CERT", "cert.pem")
+    tls_key = os.environ.get("HL7_TLS_KEY", "key.pem")
+
+    tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls_context.load_cert_chain(tls_cert, tls_key)
+    logging.info(f"TLS enabled (cert={tls_cert}, key={tls_key})")
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((HOST, PORT))
@@ -84,6 +92,12 @@ def main():
         logging.info(f"HL7 Receiver listening on {HOST}:{PORT}")
         while True:
             conn, addr = srv.accept()
+            try:
+                conn = tls_context.wrap_socket(conn, server_side=True)
+            except ssl.SSLError as e:
+                logging.warning(f"TLS handshake failed from {addr}: {e}")
+                conn.close()
+                continue
             handle_connection(conn, addr)
 
 if __name__ == "__main__":
