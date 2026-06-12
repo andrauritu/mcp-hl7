@@ -18,7 +18,7 @@ def _count(tool_name: str) -> None:
 
 @mcp.tool()
 def blockchain_get_events(patient_id: int) -> dict:
-    """Get all blockchain audit events (admissions and diagnoses) recorded for a patient."""
+    """Get all blockchain audit events (admissions, diagnoses, prescriptions, and discharges) recorded for a patient."""
     _count("blockchain_get_events")
     r = httpx.get(
         f"{BLOCKCHAIN_API_BASE}/blockchain/events/{patient_id}",
@@ -35,7 +35,7 @@ def blockchain_get_events(patient_id: int) -> dict:
 
 @mcp.tool()
 def blockchain_get_all_events(limit: int = 50, offset: int = 0) -> dict:
-    """Browse all blockchain audit events across all patients. Returns a paginated list of all admissions and diagnoses recorded on-chain, sorted by most recent first. Useful for auditing the entire chain."""
+    """Browse all blockchain audit events across all patients. Returns a paginated list of all admissions, diagnoses, prescriptions, and discharges recorded on-chain, sorted by most recent first. Useful for auditing the entire chain."""
     _count("blockchain_get_all_events")
     limit = max(1, min(200, limit))
     offset = max(0, offset)
@@ -171,7 +171,7 @@ def blockchain_verify_patient(patient_id: int) -> dict:
 
 @mcp.tool()
 def blockchain_audit_summary(patient_id: int) -> dict:
-    """Get a chronological audit timeline of all blockchain events for a patient — admissions, diagnoses, and prescriptions merged and sorted by timestamp. Reconstructed entirely from on-chain data."""
+    """Get a chronological audit timeline of all blockchain events for a patient — admissions, diagnoses, prescriptions, and discharges merged and sorted by timestamp. Reconstructed entirely from on-chain data."""
     _count("blockchain_audit_summary")
 
     r = httpx.get(f"{BLOCKCHAIN_API_BASE}/blockchain/events/{patient_id}", timeout=10.0)
@@ -187,7 +187,7 @@ def blockchain_audit_summary(patient_id: int) -> dict:
             "event_type": "admission",
             "detail": e["messageType"],
             "block": e["block"],
-            "tx_hash": e["tx"],
+            "tx_hash": "0x" + e["tx"] if not e["tx"].startswith("0x") else e["tx"],
         })
 
     for e in data.get("diagnoses", []):
@@ -196,7 +196,7 @@ def blockchain_audit_summary(patient_id: int) -> dict:
             "event_type": "diagnosis",
             "detail": f"ICD {e['icdCode']}",
             "block": e["block"],
-            "tx_hash": e["tx"],
+            "tx_hash": "0x" + e["tx"] if not e["tx"].startswith("0x") else e["tx"],
         })
 
     for e in data.get("prescriptions", []):
@@ -205,7 +205,7 @@ def blockchain_audit_summary(patient_id: int) -> dict:
             "event_type": "prescription",
             "detail": f"{e['medication']}" + (f" ({e['icdCode']})" if e.get("icdCode") else ""),
             "block": e["block"],
-            "tx_hash": e["tx"],
+            "tx_hash": "0x" + e["tx"] if not e["tx"].startswith("0x") else e["tx"],
         })
 
     for e in data.get("discharges", []):
@@ -214,7 +214,7 @@ def blockchain_audit_summary(patient_id: int) -> dict:
             "event_type": "discharge",
             "detail": e["messageType"],
             "block": e["block"],
-            "tx_hash": e["tx"],
+            "tx_hash": "0x" + e["tx"] if not e["tx"].startswith("0x") else e["tx"],
         })
 
     events.sort(key=lambda e: e["timestamp_unix"])

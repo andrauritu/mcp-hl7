@@ -305,7 +305,6 @@
         </div>
         <h2 class="text-lg font-serif font-bold text-slate-800">Admit Patient</h2>
       </div>
-      <p class="text-xs text-slate-500 mb-3 relative z-10">HL7 ADT^A04 via MLLP &amp; blockchain — atomic.</p>
       <div class="relative z-10 flex-1">
         <label class="label">Patient</label>
         <select id="adm-patient" class="input-field green"><option value="">Select patient…</option></select>
@@ -325,7 +324,6 @@
         </div>
         <h2 class="text-lg font-serif font-bold text-slate-800">Discharge</h2>
       </div>
-      <p class="text-xs text-slate-500 mb-3 relative z-10">HL7 ADT^A03 via MLLP &amp; blockchain — atomic.</p>
       <div class="relative z-10 flex-1">
         <label class="label">Patient</label>
         <select id="dc-patient" class="input-field" style="border-color:rgba(239,68,68,.3)"><option value="">Select patient…</option></select>
@@ -543,7 +541,7 @@ async function loadPatients() {
         <td class="px-5 py-3 text-slate-600">${p.sex}</td>
         <td class="px-5 py-3">${dxBadges}</td>
         <td class="px-5 py-3">${rxBadges}</td>
-        <td class="px-5 py-3 text-slate-400 text-xs">${p.created_at.slice(0,16)}</td>
+        <td class="px-5 py-3 text-slate-400 text-xs">${new Date(p.created_at.replace(' ','T')+'Z').toLocaleString('ro-RO',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
       </tr>`;
     }).join('');
   } catch(e) { console.error('loadPatients', e); }

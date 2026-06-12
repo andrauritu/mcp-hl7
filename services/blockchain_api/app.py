@@ -41,7 +41,7 @@ def record_admission():
         ok=True,
         patient_id=patient_id,
         message_type=message_type,
-        tx_hash=tx_hash.hex(),
+        tx_hash="0x" + tx_hash.hex(),
         block_number=receipt["blockNumber"],
         gas_used=receipt["gasUsed"],
     ), 201
@@ -71,7 +71,7 @@ def record_diagnosis():
         ok=True,
         patient_id=patient_id,
         icd_code=icd_code,
-        tx_hash=tx_hash.hex(),
+        tx_hash="0x" + tx_hash.hex(),
         block_number=receipt["blockNumber"],
         gas_used=receipt["gasUsed"],
     ), 201
@@ -103,7 +103,7 @@ def record_prescription():
         patient_id=patient_id,
         medication=medication,
         icd_code=icd_code,
-        tx_hash=tx_hash.hex(),
+        tx_hash="0x" + tx_hash.hex(),
         block_number=receipt["blockNumber"],
         gas_used=receipt["gasUsed"],
     ), 201
@@ -133,7 +133,7 @@ def record_discharge():
         ok=True,
         patient_id=patient_id,
         message_type=message_type,
-        tx_hash=tx_hash.hex(),
+        tx_hash="0x" + tx_hash.hex(),
         block_number=receipt["blockNumber"],
         gas_used=receipt["gasUsed"],
     ), 201
